@@ -787,8 +787,9 @@ async def expense_summary_report(
         total_expenses += expense.amount
         if is_setup_investment(expense):
             setup_investment += expense.amount
-        category_stats[expense.category.value]["amount"] += expense.amount
-        category_stats[expense.category.value]["count"] += 1
+        cat_key = str(getattr(expense.category, "value", expense.category))
+        category_stats[cat_key]["amount"] += expense.amount
+        category_stats[cat_key]["count"] += 1
         if expense.date in daily:
             daily[expense.date] += expense.amount
 

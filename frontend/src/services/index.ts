@@ -62,6 +62,7 @@ import type {
   ExpenseStats,
   Category,
   Uom,
+  ExpenseCategoryItem,
   UserListItem,
   AssignableUserItem,
   UserRole,
@@ -723,6 +724,33 @@ export const uomService = {
   },
   remove: async (id: string): Promise<void> => {
     await apiClient.delete(`/uoms/${id}`);
+  },
+};
+
+export const expenseCategoryService = {
+  getAll: async (includeInactive = false): Promise<ExpenseCategoryItem[]> => {
+    const { data } = await apiClient.get('/expense-categories', {
+      params: includeInactive ? { include_inactive: true } : undefined,
+    });
+    return data as ExpenseCategoryItem[];
+  },
+  create: async (payload: {
+    code: string;
+    label: string;
+    description?: string;
+  }): Promise<ExpenseCategoryItem> => {
+    const { data } = await apiClient.post('/expense-categories', payload);
+    return data as ExpenseCategoryItem;
+  },
+  update: async (
+    id: string,
+    payload: { code?: string; label?: string; description?: string; isActive?: boolean },
+  ): Promise<ExpenseCategoryItem> => {
+    const { data } = await apiClient.patch(`/expense-categories/${id}`, payload);
+    return data as ExpenseCategoryItem;
+  },
+  remove: async (id: string): Promise<void> => {
+    await apiClient.delete(`/expense-categories/${id}`);
   },
 };
 

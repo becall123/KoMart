@@ -59,7 +59,7 @@ async def record_payment(
         title=f"PO payment {po.order_number}",
         description=body.notes.strip() or f"Payment for purchase order {po.order_number}",
         amount=amount,
-        category=ExpenseCategory.purchase_order,
+        category=ExpenseCategory.purchase_order.value,
         date=body.date,
         paid_to=po.supplier_name,
         payment_method=body.payment_method.strip() or "cash",
@@ -135,7 +135,7 @@ async def record_payment(
             "id": str(expense.id),
             "title": expense.title,
             "amount": expense.amount,
-            "category": expense.category.value,
+            "category": str(getattr(expense.category, "value", expense.category)),
             "purchase_order_id": str(po.id),
         },
     )

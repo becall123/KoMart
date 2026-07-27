@@ -8,7 +8,11 @@ from app.models.user import User
 from app.models.expense import Expense, ExpenseCategory
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate, ExpenseResponse, ExpenseStatsResponse
 from app.schemas.common import PaginatedResponse
-from app.services.expense_helpers import SETUP_INVESTMENT_MATCH, normalize_setup_fields
+from app.services.expense_helpers import (
+    SETUP_INVESTMENT_MATCH,
+    assert_valid_expense_category,
+    normalize_setup_fields,
+)
 from app.models.audit_log import AuditModule
 from app.services.audit import log_audit, expense_snapshot
 from app.services.po_payment import reverse_payment_for_expense
@@ -22,9 +26,10 @@ def _to_response(e: Expense) -> ExpenseResponse:
         title=e.title,
         description=e.description,
         amount=e.amount,
-        category=e.category,
+        category=str(e.category),
         date=e.date,
         paid_to=e.paid_to,
+        bill_no=getattr(e, "bill_no", None),
         payment_method=e.payment_method,
         is_setup_cost=e.is_setup_cost,
         purchase_order_id=getattr(e, "purchase_order_id", None),
@@ -131,7 +136,8 @@ async def create_expense(
     current_user: User = Depends(require_manager_or_above),
 ):
     data = normalize_setup_fields(body.model_dump())
-    if data.get("category") == ExpenseCategory.purchase_order and not data.get("purchase_order_id"):
+    await assert_valid_expense_category(str(data.get("category") or ""))
+    if data.get("category") == ExpenseCategory.purchase_order.value and not data.get("purchase_order_id"):
         # Manual PO-category expenses are allowed without a link; system payments set the id.
         pass
     expense = Expense(**data)
@@ -177,6 +183,11 @@ async def update_expense(
 
     before = expense_snapshot(expense)
     update_data = {k: v for k, v in body.model_dump().items() if v is not None}
+    if "category" in update_data:
+        await assert_valid_expense_category(
+            str(update_data["category"]),
+            allow_inactive=True,
+        )
     normalized = normalize_setup_fields({
         "category": update_data.get("category", expense.category),
         "is_setup_cost": update_data.get("is_setup_cost", expense.is_setup_cost),

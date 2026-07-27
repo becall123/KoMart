@@ -23,7 +23,7 @@ import { HeroCarousel } from '@/components/catalog/HeroCarousel';
 import { useInfiniteCatalogProducts, useCatalogOffers, useCatalogTags, useStoreInfo } from '@/hooks/useCatalog';
 import { buildCatalogDiscountMap, hasActiveDiscount } from '@/utils/catalogDiscounts';
 import { formatCurrency, productStatusOf, productStatusLabel, productStatusColor } from '@/utils';
-import { PRODUCT_CATEGORIES } from '@/constants';
+import { useCategoryNames } from '@/hooks/useCategories';
 import type { CatalogProduct } from '@/types';
 
 // ── Product Card ────────────────────────────────────────────────────────────
@@ -165,7 +165,7 @@ const CatalogCard = memo(function CatalogCard({ product, discountLabel, onClick 
 
 export function CatalogPage() {
   const navigate = useNavigate();
-  const categoryOptions = [...PRODUCT_CATEGORIES];
+  const categoryOptions = useCategoryNames();
 
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');

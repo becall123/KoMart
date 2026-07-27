@@ -24,6 +24,7 @@ from app.routers import (
     users,
     categories,
     uoms,
+    expense_categories,
     audit_logs,
     discounts,
     day_closes,
@@ -82,6 +83,7 @@ app.include_router(expenses.router, prefix=API_PREFIX)
 app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(categories.router, prefix=API_PREFIX)
 app.include_router(uoms.router, prefix=API_PREFIX)
+app.include_router(expense_categories.router, prefix=API_PREFIX)
 app.include_router(audit_logs.router, prefix=API_PREFIX)
 app.include_router(discounts.router, prefix=API_PREFIX)
 app.include_router(day_closes.router, prefix=API_PREFIX)

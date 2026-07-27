@@ -27,12 +27,13 @@ import { DataTable, type Column } from '@/components/tables/DataTable';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { StatCard } from '@/components/common/StatCard';
 import { useExpenses, useExpenseStats, useDeleteExpense } from '@/hooks/useExpenses';
-import { EXPENSE_CATEGORIES } from '@/constants';
+import { useExpenseCategoryLabelMap, useExpenseCategoryOptions } from '@/hooks/useExpenseCategories';
 import { formatCurrency, isAdminOrManager } from '@/utils';
 import { useFormatDate } from '@/hooks/useFormatDate';
 import { showApiError, showSuccess } from '@/utils/toast';
 import { useAuthStore } from '@/store';
 import type { Expense } from '@/types';
+import { ExpenseCategoryInfoIcon } from './expenseCategoryInfo';
 
 const CATEGORY_COLOR: Record<string, 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'> = {
   setup_investment: 'secondary',
@@ -46,10 +47,6 @@ const CATEGORY_COLOR: Record<string, 'default' | 'primary' | 'secondary' | 'erro
   equipment: 'primary',
   other: 'default',
 };
-
-function categoryLabel(value: string) {
-  return EXPENSE_CATEGORIES.find((c) => c.value === value)?.label ?? value;
-}
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -65,6 +62,8 @@ export function ExpensesPage() {
   const formatDate = useFormatDate();
   const user = useAuthStore((s) => s.user);
   const canManage = isAdminOrManager(user?.role);
+  const categoryOptions = useExpenseCategoryOptions();
+  const categoryLabels = useExpenseCategoryLabelMap();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [setupFilter, setSetupFilter] = useState('');
@@ -73,6 +72,8 @@ export function ExpensesPage() {
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const categoryLabel = (value: string) => categoryLabels.get(value) ?? value;
 
   const listParams = {
     search: search || undefined,
@@ -142,6 +143,16 @@ export function ExpensesPage() {
           size="small"
           variant="outlined"
         />
+      ),
+    },
+    {
+      id: 'billNo',
+      label: 'Bill no.',
+      minWidth: 120,
+      render: (row) => (
+        <Typography variant="body2" color="text.secondary">
+          {row.billNo?.trim() ? row.billNo : '—'}
+        </Typography>
       ),
     },
     {
@@ -248,19 +259,22 @@ export function ExpensesPage() {
               placeholder="Search expenses..."
             />
           </Box>
-          <FormControl size="small" sx={{ minWidth: 180 }}>
-            <InputLabel>Category</InputLabel>
-            <Select
-              label="Category"
-              value={category}
-              onChange={(e) => { setCategory(e.target.value); setPage(0); }}
-            >
-              <MenuItem value="">All Categories</MenuItem>
-              {EXPENSE_CATEGORIES.map((c) => (
-                <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <FormControl size="small" sx={{ minWidth: 180 }}>
+              <InputLabel>Category</InputLabel>
+              <Select
+                label="Category"
+                value={category}
+                onChange={(e) => { setCategory(e.target.value); setPage(0); }}
+              >
+                <MenuItem value="">All Categories</MenuItem>
+                {categoryOptions.map((c) => (
+                  <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <ExpenseCategoryInfoIcon />
+          </Box>
           <FormControl size="small" sx={{ minWidth: 160 }}>
             <InputLabel>Setup filter</InputLabel>
             <Select

@@ -21,6 +21,16 @@ export interface Uom {
   createdAt: string;
 }
 
+export interface ExpenseCategoryItem {
+  id: string;
+  code: string;
+  label: string;
+  description: string;
+  isActive: boolean;
+  isSystem: boolean;
+  createdAt: string;
+}
+
 export interface UserListItem {
   id: string;
   name: string;
@@ -801,17 +811,7 @@ export interface ListQueryParams {
   [key: string]: string | number | boolean | undefined;
 }
 
-export type ExpenseCategory =
-  | 'setup_investment'
-  | 'purchase_order'
-  | 'rent'
-  | 'utilities'
-  | 'salaries'
-  | 'marketing'
-  | 'supplies'
-  | 'maintenance'
-  | 'equipment'
-  | 'other';
+export type ExpenseCategory = string;
 
 export interface Expense {
   id: string;
@@ -821,6 +821,7 @@ export interface Expense {
   category: ExpenseCategory;
   date: string;
   paidTo?: string;
+  billNo?: string;
   paymentMethod?: string;
   isSetupCost: boolean;
   purchaseOrderId?: string;

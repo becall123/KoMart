@@ -1,44 +1,46 @@
 from pydantic import BaseModel, Field
 from typing import Optional
-from app.models.expense import ExpenseCategory
 
 
 class ExpenseCreate(BaseModel):
-    title:          str
-    description:    Optional[str] = None
-    amount:         float = Field(ge=0)
-    category:       ExpenseCategory
-    date:           str
-    paid_to:        Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    amount: float = Field(ge=0)
+    category: str
+    date: str
+    paid_to: Optional[str] = None
+    bill_no: Optional[str] = None
     payment_method: Optional[str] = None
-    is_setup_cost:  bool = False
+    is_setup_cost: bool = False
     purchase_order_id: Optional[str] = None
 
 
 class ExpenseUpdate(BaseModel):
-    title:          Optional[str] = None
-    description:    Optional[str] = None
-    amount:         Optional[float] = Field(default=None, ge=0)
-    category:       Optional[ExpenseCategory] = None
-    date:           Optional[str] = None
-    paid_to:        Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    amount: Optional[float] = Field(default=None, ge=0)
+    category: Optional[str] = None
+    date: Optional[str] = None
+    paid_to: Optional[str] = None
+    bill_no: Optional[str] = None
     payment_method: Optional[str] = None
-    is_setup_cost:  Optional[bool] = None
+    is_setup_cost: Optional[bool] = None
 
 
 class ExpenseResponse(BaseModel):
-    id:             str
-    title:          str
-    description:    Optional[str]
-    amount:         float
-    category:       ExpenseCategory
-    date:           str
-    paid_to:        Optional[str]
+    id: str
+    title: str
+    description: Optional[str]
+    amount: float
+    category: str
+    date: str
+    paid_to: Optional[str]
+    bill_no: Optional[str] = None
     payment_method: Optional[str]
-    is_setup_cost:  bool
+    is_setup_cost: bool
     purchase_order_id: Optional[str] = None
-    created_at:     str
-    updated_at:     str
+    created_at: str
+    updated_at: str
 
 
 class ExpenseStatsResponse(BaseModel):

@@ -36,7 +36,7 @@ import { useStoreSettings } from '@/hooks/useSettings';
 import { useSuppliers } from '@/hooks/useSuppliers';
 import { useCategoryNames } from '@/hooks/useCategories';
 import { useUomOptions } from '@/hooks/useUoms';
-import { DROPDOWN_PAGE_SIZE, PRODUCT_CATEGORIES, COUNTRIES, PRODUCT_STATUS_OPTIONS, SELL_MODE_OPTIONS } from '@/constants';
+import { DROPDOWN_PAGE_SIZE, COUNTRIES, PRODUCT_STATUS_OPTIONS, SELL_MODE_OPTIONS } from '@/constants';
 import { PRODUCT_FIELD_LABELS } from '@/constants/productFieldLabels';
 import { UomConversionHint, UomSectionTitle } from '@/components/uom/UomUi';
 import { formatCurrency } from '@/utils';
@@ -156,7 +156,7 @@ export function ProductFormPage() {
 
   // DB-backed categories; fall back to hardcoded list while loading
   const dbCategories = useCategoryNames();
-  const categoryOptions = dbCategories.length > 0 ? dbCategories : [...PRODUCT_CATEGORIES];
+  const categoryOptions = dbCategories;
   const uomOptions = useUomOptions();
 
   const suppliers = suppliersData?.data ?? [];

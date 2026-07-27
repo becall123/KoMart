@@ -8,6 +8,7 @@ from app.models.transaction import Transaction
 from app.models.notification import Notification
 from app.models.settings import StoreSettings
 from app.models.expense import Expense
+from app.models.expense_category import ExpenseCategoryDoc
 from app.models.category import Category
 from app.models.uom import Uom
 from app.models.refresh_token import RefreshToken
@@ -30,6 +31,7 @@ __all__ = [
     "Notification",
     "StoreSettings",
     "Expense",
+    "ExpenseCategoryDoc",
     "Category",
     "Uom",
     "RefreshToken",

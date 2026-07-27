@@ -54,7 +54,6 @@ import { useBulkUpdateProducts } from '@/hooks/useProducts';
 import {
   COUNTRIES,
   DROPDOWN_PAGE_SIZE,
-  PRODUCT_CATEGORIES,
   PRODUCT_STATUS_OPTIONS,
 } from '@/constants';
 import { useSuppliers } from '@/hooks/useSuppliers';
@@ -616,10 +615,7 @@ export function ProductSheetView({
   const bulkMutation = useBulkUpdateProducts();
   const { data: suppliersData } = useSuppliers({ pageSize: DROPDOWN_PAGE_SIZE });
   const dbCategories = useCategoryNames();
-  const categoryOptions = useMemo(
-    () => (dbCategories.length > 0 ? dbCategories : [...PRODUCT_CATEGORIES]),
-    [dbCategories],
-  );
+  const categoryOptions = useMemo(() => dbCategories, [dbCategories]);
   const uomOptions = useUomOptions();
   const suppliers = suppliersData?.data ?? [];
 

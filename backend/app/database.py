@@ -16,6 +16,7 @@ from app.models import (
     Notification,
     StoreSettings,
     Expense,
+    ExpenseCategoryDoc,
     Category,
     Uom,
     RefreshToken,
@@ -85,6 +86,7 @@ async def _run_startup_migrations() -> None:
         {"$set": {"default_payment_method": "bank"}},
     )
     await _seed_default_uoms()
+    await _seed_default_expense_categories()
     # Assign 2-digit category codes + seed SKU sequences for 6-digit CCNNNN SKUs.
     from app.services.sku import backfill_category_sku_codes
     await backfill_category_sku_codes()
@@ -129,6 +131,7 @@ async def init_db() -> None:
             Notification,
             StoreSettings,
             Expense,
+            ExpenseCategoryDoc,
             Category,
             Uom,
             RefreshToken,
@@ -166,3 +169,13 @@ async def _seed_default_uoms() -> None:
         return
     for code, label in DEFAULT_UOMS:
         await Uom(code=code, label=label).insert()
+
+
+async def _seed_default_expense_categories() -> None:
+    from app.models.expense_category import DEFAULT_EXPENSE_CATEGORIES
+
+    existing = {c.code for c in await ExpenseCategoryDoc.find_all().to_list()}
+    for code, label in DEFAULT_EXPENSE_CATEGORIES:
+        if code in existing:
+            continue
+        await ExpenseCategoryDoc(code=code, label=label).insert()

@@ -5,6 +5,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import StraightenIcon from '@mui/icons-material/Straighten';
+import PaymentsIcon from '@mui/icons-material/Payments';
 import HistoryIcon from '@mui/icons-material/History';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -14,12 +15,21 @@ import { StoreInfoTab } from './tabs/StoreInfoTab';
 import { UsersTab } from './tabs/UsersTab';
 import { CategoriesTab } from './tabs/CategoriesTab';
 import { UomsTab } from './tabs/UomsTab';
+import { ExpenseCategoriesTab } from './tabs/ExpenseCategoriesTab';
 import { AuditLogsTab } from './tabs/AuditLogsTab';
 import { DiscountsTab } from './tabs/DiscountsTab';
 
-type TabKey = 'store' | 'users' | 'categories' | 'uoms' | 'discounts' | 'audit';
+type TabKey = 'store' | 'users' | 'categories' | 'uoms' | 'expense-categories' | 'discounts' | 'audit';
 
-const TAB_ORDER: TabKey[] = ['store', 'users', 'categories', 'uoms', 'discounts', 'audit'];
+const TAB_ORDER: TabKey[] = [
+  'store',
+  'users',
+  'categories',
+  'uoms',
+  'expense-categories',
+  'discounts',
+  'audit',
+];
 
 export function SettingsPage() {
   const { tab } = useParams<{ tab?: string }>();
@@ -46,7 +56,7 @@ export function SettingsPage() {
 
   return (
     <Box>
-      <PageHeader title="Settings" subtitle="Store configuration, users, categories, UOM, discounts, and audit logs" />
+      <PageHeader title="Settings" subtitle="Store configuration, users, categories, UOM, expenses, discounts, and audit logs" />
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs value={activeTab} onChange={handleTabChange}>
@@ -74,6 +84,12 @@ export function SettingsPage() {
             value="uoms"
             label="UOM"
             icon={<StraightenIcon />}
+            iconPosition="start"
+          />
+          <Tab
+            value="expense-categories"
+            label="Expense Categories"
+            icon={<PaymentsIcon />}
             iconPosition="start"
           />
           {managerAccess && (
@@ -105,6 +121,7 @@ export function SettingsPage() {
       )}
       {activeTab === 'categories' && <CategoriesTab />}
       {activeTab === 'uoms' && <UomsTab />}
+      {activeTab === 'expense-categories' && <ExpenseCategoriesTab />}
       {activeTab === 'discounts' && (
         managerAccess ? (
           <DiscountsTab />

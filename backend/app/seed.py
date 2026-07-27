@@ -377,6 +377,19 @@ async def init():
     else:
         print(f"  Skipped categories — {existing_cats} category(ies) already exist.")
 
+    from app.models.expense_category import DEFAULT_EXPENSE_CATEGORIES, ExpenseCategoryDoc
+    existing_exp = {c.code for c in await ExpenseCategoryDoc.find_all().to_list()}
+    created_exp = 0
+    for code, label in DEFAULT_EXPENSE_CATEGORIES:
+        if code in existing_exp:
+            continue
+        await ExpenseCategoryDoc(code=code, label=label).insert()
+        created_exp += 1
+    if created_exp:
+        print(f"  Created {created_exp} expense categories.")
+    else:
+        print("  Skipped expense categories — already exist.")
+
     print()
     print("Init complete! Run the app and log in:")
     print("  Admin email : " + os.environ.get("ADMIN_EMAIL", "admin@komart.com"))

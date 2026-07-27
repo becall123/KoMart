@@ -218,6 +218,7 @@ export const QUERY_KEYS = {
   settings: ['settings'] as const,
   categories: ['categories'] as const,
   uoms: ['uoms'] as const,
+  expenseCategories: ['expenseCategories'] as const,
   users: ['users'] as const,
   user: (id: string) => ['users', id] as const,
   auditLogs: (filters?: string) => ['auditLogs', filters] as const,

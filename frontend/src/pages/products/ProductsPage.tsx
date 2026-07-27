@@ -29,7 +29,7 @@ import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/common/PageHeader';
 import { SearchBar } from '@/components/common/SearchBar';
 import { ProductMetaChips } from '@/components/products/ProductMetaChips';
-import { DROPDOWN_PAGE_SIZE, GRID_PAGE_SIZE, PRODUCT_CATEGORIES, PRODUCT_STATUS_OPTIONS } from '@/constants';
+import { DROPDOWN_PAGE_SIZE, GRID_PAGE_SIZE, PRODUCT_STATUS_OPTIONS } from '@/constants';
 import { useProducts, useInfiniteProducts } from '@/hooks/useProducts';
 import { productService } from '@/services';
 import { useDiscountRules } from '@/hooks/useDiscounts';
@@ -154,7 +154,7 @@ export function ProductsPage() {
   const canManage = isAdminOrManager(user?.role);
   const canCreatePo = canManagePurchaseOrders(user?.role);
   const dbCategories = useCategoryNames();
-  const categoryOptions = dbCategories.length > 0 ? dbCategories : [...PRODUCT_CATEGORIES];
+  const categoryOptions = dbCategories;
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
   const [category, setCategory] = useState('');

@@ -38,7 +38,6 @@ import { PageHeader } from '@/components/common/PageHeader';
 import {
   COUNTRIES,
   DROPDOWN_PAGE_SIZE,
-  PRODUCT_CATEGORIES,
   PRODUCT_STATUS_OPTIONS,
   QUERY_KEYS,
   STALE_TIME,
@@ -93,7 +92,6 @@ function showBulkAddTips() {
   );
 }
 const EMPTY_SUPPLIERS: Supplier[] = [];
-const FALLBACK_CATEGORIES = [...PRODUCT_CATEGORIES];
 
 type ColKind = 'text' | 'number' | 'select';
 
@@ -469,7 +467,7 @@ export function BulkProductFormPage() {
   const uomOptions = useUomOptions();
   const primaryUom = defaultPrimaryUom(uomOptions);
   const dbCategories = useCategoryNames();
-  const categories = dbCategories.length ? dbCategories : FALLBACK_CATEGORIES;
+  const categories = dbCategories;
 
   const { data: existingKeys } = useQuery({
     queryKey: [...QUERY_KEYS.products, 'bulk-add-existing-keys'],

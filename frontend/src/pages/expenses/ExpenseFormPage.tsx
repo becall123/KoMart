@@ -24,9 +24,11 @@ import { z } from 'zod';
 import { PageHeader } from '@/components/common/PageHeader';
 import { NepaliAwareDatePicker } from '@/components/common/NepaliAwareDatePicker';
 import { useCreateExpense, useUpdateExpense, useExpense } from '@/hooks/useExpenses';
-import { EXPENSE_CATEGORIES, PAYMENT_METHODS, CURRENCY_SYMBOL } from '@/constants';
+import { useExpenseCategoryOptions } from '@/hooks/useExpenseCategories';
+import { PAYMENT_METHODS, CURRENCY_SYMBOL } from '@/constants';
 import { showApiError, showSuccess } from '@/utils/toast';
 import { formatCurrency } from '@/utils';
+import { ExpenseCategoryInfoIcon } from './expenseCategoryInfo';
 
 const schema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -34,6 +36,7 @@ const schema = z.object({
   category: z.string().min(1, 'Category is required'),
   date: z.string().min(1, 'Date is required'),
   paidTo: z.string().optional(),
+  billNo: z.string().optional(),
   paymentMethod: z.string().optional(),
   isSetupCost: z.boolean(),
   description: z.string().optional(),
@@ -49,6 +52,7 @@ export function ExpenseFormPage() {
   const { data: existing, isLoading } = useExpense(id ?? '');
   const createMutation = useCreateExpense();
   const updateMutation = useUpdateExpense();
+  const categoryOptions = useExpenseCategoryOptions();
 
   const {
     register,
@@ -66,6 +70,7 @@ export function ExpenseFormPage() {
       category: '',
       date: new Date().toISOString().split('T')[0],
       paidTo: '',
+      billNo: '',
       paymentMethod: '',
       isSetupCost: false,
       description: '',
@@ -80,6 +85,7 @@ export function ExpenseFormPage() {
         category: existing.category,
         date: existing.date,
         paidTo: existing.paidTo ?? '',
+        billNo: existing.billNo ?? '',
         paymentMethod: existing.paymentMethod ?? '',
         isSetupCost: existing.isSetupCost,
         description: existing.description ?? '',
@@ -98,9 +104,10 @@ export function ExpenseFormPage() {
     const payload = {
       title: values.title,
       amount: values.amount,
-      category: values.category as import('@/types').ExpenseCategory,
+      category: values.category,
       date: values.date,
       paidTo: values.paidTo || undefined,
+      billNo: values.billNo?.trim() || '',
       paymentMethod: values.paymentMethod || undefined,
       isSetupCost: values.isSetupCost || values.category === 'setup_investment',
       description: values.description || undefined,
@@ -224,25 +231,30 @@ export function ExpenseFormPage() {
             </Grid>
 
             <Grid size={{ xs: 12, sm: 6 }}>
-              <Controller
-                name="category"
-                control={control}
-                render={({ field }) => (
-                  <FormControl fullWidth required error={!!errors.category}>
-                    <InputLabel>Category</InputLabel>
-                    <Select label="Category" {...field}>
-                      {EXPENSE_CATEGORIES.map((c) => (
-                        <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>
-                      ))}
-                    </Select>
-                    {errors.category && (
-                      <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.75 }}>
-                        {errors.category.message}
-                      </Typography>
-                    )}
-                  </FormControl>
-                )}
-              />
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
+                <Controller
+                  name="category"
+                  control={control}
+                  render={({ field }) => (
+                    <FormControl fullWidth required error={!!errors.category}>
+                      <InputLabel>Category</InputLabel>
+                      <Select label="Category" {...field}>
+                        {categoryOptions.map((c) => (
+                          <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>
+                        ))}
+                      </Select>
+                      {errors.category && (
+                        <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.75 }}>
+                          {errors.category.message}
+                        </Typography>
+                      )}
+                    </FormControl>
+                  )}
+                />
+                <Box sx={{ pt: 1 }}>
+                  <ExpenseCategoryInfoIcon />
+                </Box>
+              </Box>
             </Grid>
 
             {/* Date + Paid To */}
@@ -269,6 +281,15 @@ export function ExpenseFormPage() {
                 fullWidth
                 placeholder="Vendor or person name"
                 {...register('paidTo')}
+              />
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="Bill no."
+                fullWidth
+                placeholder="Optional vendor bill / invoice number"
+                {...register('billNo')}
               />
             </Grid>
 

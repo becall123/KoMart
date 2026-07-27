@@ -61,7 +61,8 @@ import { transactionService } from '@/services';
 import { getErrorMessage } from '@/services/apiClient';
 import { showSuccess, showWarning, showApiError } from '@/utils/toast';
 import { formatAmount, formatCurrency } from '@/utils';
-import { DROPDOWN_PAGE_SIZE, POS_PRODUCTS_PAGE_SIZE, PRODUCT_CATEGORIES } from '@/constants';
+import { DROPDOWN_PAGE_SIZE, POS_PRODUCTS_PAGE_SIZE } from '@/constants';
+import { useCategoryNames } from '@/hooks/useCategories';
 import { useStoreSettings } from '@/hooks/useSettings';
 import { receiptBrandingFromSettings } from '@/utils/receiptPrint';
 import { cartLineKey } from '@/utils/cartLine';
@@ -519,6 +520,7 @@ export function POSPage() {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
   const [categoryFilter, setCategoryFilter] = useState('');
+  const categoryOptions = useCategoryNames();
   const [supplierIdFilter, setSupplierIdFilter] = useState('');
   const [popularOnly, setPopularOnly] = useState(false);
   const [trendingOnly, setTrendingOnly] = useState(false);
@@ -900,7 +902,7 @@ export function POSPage() {
               onChange={(e) => setCategoryFilter(e.target.value)}
             >
               <MenuItem value="">All</MenuItem>
-              {PRODUCT_CATEGORIES.map((c) => (
+              {categoryOptions.map((c) => (
                 <MenuItem key={c} value={c}>{c}</MenuItem>
               ))}
             </Select>

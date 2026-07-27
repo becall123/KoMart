@@ -31,7 +31,8 @@ import { useSuppliers } from '@/hooks/useSuppliers';
 import { downloadCsv, formatCurrency, formatExpiryDate } from '@/utils';
 import { formatStockQty } from '@/utils/uomDisplay';
 import { useAuthStore } from '@/store';
-import { PRODUCT_CATEGORIES, DROPDOWN_PAGE_SIZE } from '@/constants';
+import { DROPDOWN_PAGE_SIZE } from '@/constants';
+import { useCategoryNames } from '@/hooks/useCategories';
 import type { InventoryItem } from '@/types';
 import { inventoryService, type InventoryQueryParams } from '@/services';
 import { showApiError, showSuccess } from '@/utils/toast';
@@ -81,6 +82,7 @@ export function InventoryPage() {
   const [search, setSearch] = useState('');
   const [supplierId, setSupplierId] = useState('');
   const [category, setCategory] = useState('');
+  const categoryOptions = useCategoryNames();
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
@@ -378,7 +380,7 @@ export function InventoryPage() {
               sx={{ minWidth: 180 }}
             >
               <MenuItem value="">All Categories</MenuItem>
-              {PRODUCT_CATEGORIES.map((c) => (
+              {categoryOptions.map((c) => (
                 <MenuItem key={c} value={c}>{c}</MenuItem>
               ))}
             </TextField>

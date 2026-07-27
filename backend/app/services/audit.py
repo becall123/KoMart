@@ -222,6 +222,7 @@ def expense_snapshot(expense: Any) -> dict[str, Any]:
         "amount": expense.amount,
         "category": category.value if hasattr(category, "value") else str(category),
         "date": expense.date,
+        "bill_no": getattr(expense, "bill_no", None) or "",
         "is_setup_cost": bool(getattr(expense, "is_setup_cost", False)),
         "purchase_order_id": getattr(expense, "purchase_order_id", None) or "",
     }
