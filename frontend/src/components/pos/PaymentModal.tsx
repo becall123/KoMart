@@ -36,6 +36,7 @@ import { ReceiptView } from '@/components/pos/ReceiptView';
 import { ReceiptActions } from '@/components/pos/ReceiptActions';
 import type { AppliedPromotion, CartItem, PaymentMethod, ReceiptBranding, Transaction } from '@/types';
 import { printTransactionReceipt } from '@/utils/receiptPrint';
+import { noNumberSpinnerSx } from '@/styles/inputStyles';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -98,15 +99,6 @@ const METHODS: { value: PaymentMethod; label: string }[] = [
 function roundToNearest5(amount: number): number {
   return Math.round(amount / 5) * 5;
 }
-
-const noNumberSpinnerSx = {
-  MozAppearance: 'textfield',
-  '& input[type=number]': { MozAppearance: 'textfield' },
-  '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
-    WebkitAppearance: 'none',
-    margin: 0,
-  },
-} as const;
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (

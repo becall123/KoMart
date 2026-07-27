@@ -25,7 +25,7 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import CategoryIcon from '@mui/icons-material/LocalOffer';
+import { SettingsSectionHeader } from '@/components/common/SettingsSectionHeader';
 import { useCategories, useCreateCategory, useUpdateCategory } from '@/hooks/useCategories';
 import { getErrorMessage } from '@/services/apiClient';
 import { showSuccess } from '@/utils/toast';
@@ -108,29 +108,25 @@ export function CategoriesTab() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <CategoryIcon color="primary" />
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>Product Categories</Typography>
-        </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => {
-            setAddOpen(true);
-            setNewName('');
-            setNewDesc('');
-            setNewCode('');
-            setError('');
-          }}
-        >
-          Add Category
-        </Button>
-      </Box>
-
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Each category needs a unique 2-digit code. Product SKUs are 6 digits: category code + 4-digit product number (e.g. 050001).
-      </Typography>
+      <SettingsSectionHeader
+        title="Product Categories"
+        description="Each category needs a unique 2-digit code. Product SKUs are 6 digits: category code + 4-digit product number (e.g. 050001)."
+        action={(
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setAddOpen(true);
+              setNewName('');
+              setNewDesc('');
+              setNewCode('');
+              setError('');
+            }}
+          >
+            Add Category
+          </Button>
+        )}
+      />
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {isError && (
@@ -142,8 +138,8 @@ export function CategoriesTab() {
       {isLoading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
       ) : (
-        <TableContainer component={Paper}>
-          <Table>
+        <TableContainer component={Paper} variant="outlined">
+          <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell width={80}>Code</TableCell>

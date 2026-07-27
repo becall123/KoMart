@@ -31,29 +31,8 @@ async def allocate_sku_for_category(
     max_attempts: int = 25,
 ) -> str:
     """Atomically allocate next SKU for a category: CC + NNNN."""
+    category, code = await _resolve_category_for_sku(category_name)
     name = (category_name or "").strip()
-    if not name:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail="Category is required to generate SKU",
-        )
-
-    category = await Category.find_one(Category.name == name, Category.is_active == True)  # noqa: E712
-    if not category:
-        # Allow inactive match by name for edits / legacy rows
-        category = await Category.find_one(Category.name == name)
-    if not category:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail=f"Category '{name}' not found — create it in Settings with a 2-digit code",
-        )
-
-    code = (getattr(category, "code", None) or "").strip()
-    if len(code) != 2 or not code.isdigit():
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail=f"Category '{name}' has no valid 2-digit code — set it in Settings",
-        )
 
     exclude_lower = {value.lower() for value in (exclude or set()) if value}
     col = Category.get_motor_collection()
@@ -103,6 +82,92 @@ async def generate_unique_sku(
         category,
         exclude=exclude,
         max_attempts=max_attempts,
+    )
+
+
+async def _resolve_category_for_sku(category_name: str) -> tuple[Category, str]:
+    """Return (category, 2-digit code) or raise HTTPException."""
+    name = (category_name or "").strip()
+    if not name:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Category is required to generate SKU",
+        )
+
+    category = await Category.find_one(Category.name == name, Category.is_active == True)  # noqa: E712
+    if not category:
+        category = await Category.find_one(Category.name == name)
+    if not category:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=f"Category '{name}' not found — create it in Settings with a 2-digit code",
+        )
+
+    code = (getattr(category, "code", None) or "").strip()
+    if len(code) != 2 or not code.isdigit():
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=f"Category '{name}' has no valid 2-digit code — set it in Settings",
+        )
+    return category, code
+
+
+async def peek_sku_for_category(
+    category_name: str,
+    *,
+    exclude: set[str] | None = None,
+    start_seq: int | None = None,
+    max_attempts: int = 50,
+) -> tuple[str, int]:
+    """
+    Suggest next SKU without incrementing next_sku_seq.
+
+    Returns (sku, next_seq_to_try) so callers can peek multiple without gaps in the preview list.
+    Allocation still happens only on create via allocate_sku_for_category.
+    """
+    category, code = await _resolve_category_for_sku(category_name)
+    exclude_lower = {value.lower() for value in (exclude or set()) if value}
+
+    if start_seq is None:
+        seq = int(getattr(category, "next_sku_seq", 1) or 1)
+    else:
+        seq = start_seq
+    if seq < 1:
+        seq = 1
+
+    for _ in range(max_attempts):
+        if seq > 9999:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=f"Category '{category_name}' has reached the maximum of 9999 products",
+            )
+        candidate = f"{code}{seq:04d}"
+        seq += 1
+        if candidate.lower() in exclude_lower:
+            continue
+        if await Product.find_one(Product.sku == candidate):
+            continue
+        return candidate, seq
+
+    raise HTTPException(
+        status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Could not generate a unique SKU",
+    )
+
+
+async def peek_unique_sku(
+    brand: str,
+    category: str,
+    *,
+    exclude: set[str] | None = None,
+    start_seq: int | None = None,
+) -> tuple[str, int]:
+    """Dry-run SKU suggestion. Brand is ignored."""
+    _ = brand
+    return await peek_sku_for_category(
+        category,
+        exclude=exclude,
+        start_seq=start_seq,
     )
 
 

@@ -3,17 +3,17 @@ import { Link as RouterLink } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
 interface PageHeaderProps {
-  /** Kept for call-site compatibility; not rendered (TopBar shows page title). */
+  /** Kept for call-site compatibility; TopBar usually shows the page title. */
   title?: string;
-  /** Kept for call-site compatibility; not rendered. */
+  /** Optional supporting line under breadcrumbs / beside actions. */
   subtitle?: string;
   breadcrumbs?: { label: string; path?: string }[];
   action?: ReactNode;
 }
 
-export function PageHeader({ breadcrumbs, action }: PageHeaderProps) {
+export function PageHeader({ breadcrumbs, action, subtitle }: PageHeaderProps) {
   const hasBreadcrumbs = Boolean(breadcrumbs && breadcrumbs.length > 0);
-  if (!hasBreadcrumbs && !action) {
+  if (!hasBreadcrumbs && !action && !subtitle) {
     return null;
   }
 
@@ -25,7 +25,7 @@ export function PageHeader({ breadcrumbs, action }: PageHeaderProps) {
         alignItems: { sm: 'center' },
         justifyContent: 'space-between',
         gap: 1.5,
-        mb: action || hasBreadcrumbs ? 2 : 0,
+        mb: action || hasBreadcrumbs || subtitle ? 2 : 0,
       }}
     >
       <Box>
@@ -51,6 +51,15 @@ export function PageHeader({ breadcrumbs, action }: PageHeaderProps) {
             )}
           </Breadcrumbs>
         )}
+        {subtitle ? (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mt: hasBreadcrumbs ? 0.5 : 0 }}
+          >
+            {subtitle}
+          </Typography>
+        ) : null}
       </Box>
       {action && <Box sx={{ flexShrink: 0 }}>{action}</Box>}
     </Box>

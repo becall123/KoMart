@@ -11,13 +11,7 @@ import {
   Grid,
   InputLabel,
   MenuItem,
-  Paper,
   Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material';
@@ -28,6 +22,7 @@ import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/common/PageHeader';
 import { NepaliAwareDatePicker } from '@/components/common/NepaliAwareDatePicker';
 import { StatCard } from '@/components/common/StatCard';
+import { DataTable, type Column } from '@/components/tables/DataTable';
 import { PAYMENT_METHODS } from '@/constants';
 import {
   useWalletAdjustment,
@@ -40,7 +35,7 @@ import { formatCurrency, isAdminOrManager } from '@/utils';
 import { useFormatDate } from '@/hooks/useFormatDate';
 import { getErrorMessage } from '@/services/apiClient';
 import { showSuccess } from '@/utils/toast';
-import type { WalletCode } from '@/types';
+import type { WalletCode, WalletLedgerEntry } from '@/types';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -93,6 +88,8 @@ export function AccountsPage() {
   const [adjustAmount, setAdjustAmount] = useState('');
   const [adjustDate, setAdjustDate] = useState(todayIso);
   const [adjustRemarks, setAdjustRemarks] = useState('');
+  const [ledgerPage, setLedgerPage] = useState(0);
+  const [ledgerPageSize, setLedgerPageSize] = useState(25);
 
   const { data: balances, isLoading: balancesLoading, isError: balancesError } = useWalletBalances();
   const ledgerParams = useMemo(
@@ -109,6 +106,63 @@ export function AccountsPage() {
 
   const transferMutation = useWalletTransfer();
   const adjustMutation = useWalletAdjustment();
+
+  const ledgerColumns = useMemo<Column<WalletLedgerEntry>[]>(
+    () => [
+      {
+        id: 'date',
+        label: 'Date',
+        render: (row) => formatDate(row.date),
+      },
+      {
+        id: 'wallet',
+        label: 'Wallet',
+        render: (row) => walletLabel(String(row.wallet)),
+      },
+      {
+        id: 'entryType',
+        label: 'Type',
+        render: (row) => entryTypeLabel(row.entryType),
+      },
+      {
+        id: 'direction',
+        label: 'Direction',
+        render: (row) => (
+          <Typography component="span" sx={{ textTransform: 'uppercase' }}>
+            {row.direction}
+          </Typography>
+        ),
+      },
+      {
+        id: 'amount',
+        label: 'Amount',
+        align: 'right',
+        render: (row) => (
+          <Typography
+            component="span"
+            sx={{
+              fontWeight: 600,
+              color: row.direction === 'in' ? 'success.main' : 'error.main',
+            }}
+          >
+            {row.direction === 'in' ? '+' : '−'}
+            {formatCurrency(row.amount)}
+          </Typography>
+        ),
+      },
+      {
+        id: 'remarks',
+        label: 'Remarks',
+        render: (row) => row.remarks || '—',
+      },
+    ],
+    [formatDate],
+  );
+
+  const pagedLedger = useMemo(() => {
+    const start = ledgerPage * ledgerPageSize;
+    return ledger.slice(start, start + ledgerPageSize);
+  }, [ledger, ledgerPage, ledgerPageSize]);
 
   const resetTransfer = () => {
     setFromWallet('cash');
@@ -246,7 +300,7 @@ export function AccountsPage() {
         ))}
       </Grid>
 
-      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+      <Box sx={{ mb: 2 }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1.5 }}>
           Statement
         </Typography>
@@ -256,7 +310,10 @@ export function AccountsPage() {
             <Select
               label="Wallet"
               value={walletFilter}
-              onChange={(e) => setWalletFilter(e.target.value as '' | WalletCode)}
+              onChange={(e) => {
+                setWalletFilter(e.target.value as '' | WalletCode);
+                setLedgerPage(0);
+              }}
             >
               <MenuItem value="">All</MenuItem>
               {PAYMENT_METHODS.map((p) => (
@@ -269,69 +326,39 @@ export function AccountsPage() {
           <NepaliAwareDatePicker
             label="From"
             value={dateFrom}
-            onChange={setDateFrom}
+            onChange={(v) => {
+              setDateFrom(v);
+              setLedgerPage(0);
+            }}
             size="small"
           />
           <NepaliAwareDatePicker
             label="To"
             value={dateTo}
-            onChange={setDateTo}
+            onChange={(v) => {
+              setDateTo(v);
+              setLedgerPage(0);
+            }}
             size="small"
           />
         </Box>
 
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Wallet</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Direction</TableCell>
-              <TableCell align="right" sx={{ fontWeight: 700 }}>Amount</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Remarks</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {ledgerLoading && (
-              <TableRow>
-                <TableCell colSpan={6}>
-                  <Typography variant="body2" color="text.secondary">
-                    Loading…
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            )}
-            {!ledgerLoading && ledger.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={6}>
-                  <Typography variant="body2" color="text.secondary">
-                    No ledger entries in this range.
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            )}
-            {ledger.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell>{formatDate(row.date)}</TableCell>
-                <TableCell>{walletLabel(String(row.wallet))}</TableCell>
-                <TableCell>{entryTypeLabel(row.entryType)}</TableCell>
-                <TableCell sx={{ textTransform: 'uppercase' }}>{row.direction}</TableCell>
-                <TableCell
-                  align="right"
-                  sx={{
-                    fontWeight: 600,
-                    color: row.direction === 'in' ? 'success.main' : 'error.main',
-                  }}
-                >
-                  {row.direction === 'in' ? '+' : '−'}
-                  {formatCurrency(row.amount)}
-                </TableCell>
-                <TableCell>{row.remarks || '—'}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Paper>
+        <DataTable
+          columns={ledgerColumns}
+          rows={pagedLedger}
+          loading={ledgerLoading}
+          page={ledgerPage}
+          pageSize={ledgerPageSize}
+          total={ledger.length}
+          onPageChange={setLedgerPage}
+          onPageSizeChange={(size) => {
+            setLedgerPageSize(size);
+            setLedgerPage(0);
+          }}
+          emptyMessage="No ledger entries in this range."
+          getRowId={(row) => row.id}
+        />
+      </Box>
 
       <Dialog open={transferOpen} onClose={() => setTransferOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Transfer between wallets</DialogTitle>

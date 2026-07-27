@@ -32,7 +32,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import SaveIcon from '@mui/icons-material/Save';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/common/PageHeader';
 import {
@@ -84,6 +84,7 @@ const BULK_ADD_SELL_MODE_OPTIONS = [
 function showBulkAddTips() {
   showInfo(
     'Import Excel or paste rows into the grid. '
+    + 'Products → Export Excel uses the same columns (edit offline, then Import here). '
     + 'Blank name and SKU rows are skipped on save. '
     + 'Duplicate names/SKUs (in-grid or catalog) are blocked. '
     + 'SKU: leave blank only with Category set (server assigns CCNNNN), or use Generate SKUs. '
@@ -102,11 +103,13 @@ type BulkAddCol = {
   width: number;
   kind: ColKind;
   sticky?: boolean;
+  /** Sticky left offset in px (after # column at 0). */
+  stickyLeft?: number;
 };
 
 const COLUMNS: BulkAddCol[] = [
-  { key: 'name', label: PRODUCT_FIELD_LABELS.name, width: 180, kind: 'text', sticky: true },
-  { key: 'sku', label: PRODUCT_FIELD_LABELS.sku, width: 100, kind: 'text' },
+  { key: 'name', label: PRODUCT_FIELD_LABELS.name, width: 180, kind: 'text', sticky: true, stickyLeft: 44 },
+  { key: 'sku', label: PRODUCT_FIELD_LABELS.sku, width: 100, kind: 'text', sticky: true, stickyLeft: 224 },
   { key: 'brand', label: PRODUCT_FIELD_LABELS.brand, width: 120, kind: 'text' },
   { key: 'category', label: PRODUCT_FIELD_LABELS.category, width: 130, kind: 'select' },
   { key: 'barcode', label: PRODUCT_FIELD_LABELS.barcode, width: 120, kind: 'text' },
@@ -375,10 +378,10 @@ const BulkAddRowView = memo(function BulkAddRowView({
             ...(col.sticky
               ? {
                   position: 'sticky' as const,
-                  left: 44,
+                  left: col.stickyLeft ?? 44,
                   zIndex: 1,
                   background: populated ? '#fff' : '#fafafa',
-                  boxShadow: '2px 0 0 #e0e0e0',
+                  boxShadow: col.key === 'sku' ? '2px 0 0 #e0e0e0' : undefined,
                 }
               : {}),
           }}
@@ -445,6 +448,7 @@ async function loadExistingProductKeys(): Promise<BulkAddExistingLookup> {
 
 export function BulkProductFormPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const nextId = useRef(INITIAL_ROW_COUNT + 1);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tipsShown = useRef(false);
@@ -676,26 +680,47 @@ export function BulkProductFormPage() {
     }
 
     const fallbackLow = Math.max(0, Math.floor(numOr(DEFAULT_LOW_STOCK, 10)));
-    const products: ProductBulkCreateItem[] = populatedRows.map((row) =>
-      rowToPayload(
-        row,
-        rows.indexOf(row) + 1,
-        primaryUom,
-        defaultSupplierId,
-        fallbackLow,
-      ),
-    );
+    const bindings = populatedRows.map((row) => {
+      const rowNum = rows.indexOf(row) + 1;
+      return {
+        id: row.id,
+        rowNum,
+        payload: rowToPayload(row, rowNum, primaryUom, defaultSupplierId, fallbackLow),
+      };
+    });
 
     try {
-      const result = await createMutation.mutateAsync(products);
+      const result = await createMutation.mutateAsync(bindings.map((b) => b.payload));
+      const failedRowNums = new Set(result.errors.map((item) => item.row));
+      const succeededIds = new Set(
+        bindings.filter((b) => !failedRowNums.has(b.rowNum)).map((b) => b.id),
+      );
+
       if (result.created) {
         showSuccess(`${result.created} product${result.created === 1 ? '' : 's'} added.`);
+        if (succeededIds.size > 0) {
+          setRows((prev) => {
+            const remaining = prev.filter((row) => !succeededIds.has(row.id));
+            return remaining.length > 0
+              ? remaining
+              : [emptyBulkAddRow(nextId.current++)];
+          });
+          setFieldErrors((prev) => {
+            const next = { ...prev };
+            for (const id of succeededIds) delete next[id];
+            return next;
+          });
+          void queryClient.invalidateQueries({
+            queryKey: [...QUERY_KEYS.products, 'bulk-add-existing-keys'],
+          });
+          void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.products });
+        }
       }
       if (result.errors.length) {
         setPageError(
           result.errors
             .map((item) => `Row ${item.row} (${item.sku || 'no SKU'}): ${item.detail}`)
-            .join(' · '),
+            .join('\n'),
         );
         return;
       }
@@ -926,9 +951,12 @@ export function BulkProductFormPage() {
                     ...(col.sticky
                       ? {
                           position: 'sticky',
-                          left: 44,
+                          left: col.stickyLeft ?? 44,
                           zIndex: 3,
-                          boxShadow: (t: Theme) => `2px 0 0 ${t.palette.divider}`,
+                          boxShadow:
+                            col.key === 'sku'
+                              ? ((t: Theme) => `2px 0 0 ${t.palette.divider}`)
+                              : undefined,
                         }
                       : {}),
                   }}

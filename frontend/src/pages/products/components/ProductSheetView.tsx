@@ -20,6 +20,7 @@ import {
 } from '@mui/material';
 import type { Theme } from '@mui/material/styles';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CloseIcon from '@mui/icons-material/Close';
@@ -27,9 +28,11 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { useNavigate } from 'react-router-dom';
 import { getErrorMessage } from '@/services/apiClient';
+import { productService } from '@/services';
 import type { ListQueryParams, Product, ProductBulkUpdateItem, ProductStatus, Supplier } from '@/types';
 import { showSuccess, showWarning, showError, showInfo } from '@/utils/toast';
 import { copyProductsToClipboard } from '@/pages/products/productPasteExport';
+import { exportProductsToExcel } from '@/pages/products/exportProductsExcel';
 import {
   filterByStock,
   type StockFilter,
@@ -114,10 +117,12 @@ const cellSx = {
   overflow: 'hidden',
 };
 
-/** Sticky left: checkbox | # | Name */
+/** Sticky left: checkbox | # | Name | SKU */
 const STICKY_CHECKBOX_LEFT = 0;
 const STICKY_SN_LEFT = SHEET_CHECKBOX_COL_WIDTH;
 const STICKY_NAME_LEFT = SHEET_CHECKBOX_COL_WIDTH + SHEET_SN_COL_WIDTH;
+const STICKY_NAME_WIDTH = 180;
+const STICKY_SKU_LEFT = STICKY_NAME_LEFT + STICKY_NAME_WIDTH;
 
 /** Opaque fills only — alpha tokens (action.hover) make sticky cells unreadable. */
 function stickyRowBg(rowDirty: boolean, rowIndex: number, selected: boolean) {
@@ -159,6 +164,11 @@ const nativeInputSx = {
   borderRadius: 0.5,
   bgcolor: 'background.paper',
   boxSizing: 'border-box',
+  MozAppearance: 'textfield',
+  '&::-webkit-outer-spin-button, &::-webkit-inner-spin-button': {
+    WebkitAppearance: 'none',
+    margin: 0,
+  },
   '&:focus': {
     outline: '2px solid',
     outlineColor: 'primary.main',
@@ -519,7 +529,7 @@ const SheetRow = memo(function SheetRow({
           minWidth: SHEET_SN_COL_WIDTH,
           maxWidth: SHEET_SN_COL_WIDTH,
           color: 'text.secondary',
-          boxShadow: (t) => `2px 0 0 ${t.palette.divider}`,
+          boxShadow: 'none',
         }}
       >
         {serialNumber}
@@ -531,8 +541,10 @@ const SheetRow = memo(function SheetRow({
         const fieldError = fieldKey ? fieldErrors?.[fieldKey] : undefined;
         const showServerError = col.key === 'sku' && serverError;
         const isName = col.key === 'name';
+        const isSku = col.key === 'sku';
         const colWidth = PRODUCT_SHEET_COLUMNS[index].width;
         const cellFill = fieldError || showServerError ? stickyErrorBg : fill;
+        const isStickyIdentity = isName || isSku;
 
         return (
           <TableCell
@@ -543,14 +555,16 @@ const SheetRow = memo(function SheetRow({
               width: colWidth,
               minWidth: colWidth,
               maxWidth: colWidth,
-              ...(isName
+              ...(isStickyIdentity
                 ? {
                     position: 'sticky',
-                    left: STICKY_NAME_LEFT,
+                    left: isName ? STICKY_NAME_LEFT : STICKY_SKU_LEFT,
                     zIndex: 2,
                     bgcolor: cellFill,
                     backgroundImage: 'none',
-                    boxShadow: (t) => `2px 0 0 ${t.palette.divider}`,
+                    boxShadow: isSku
+                      ? ((t: Theme) => `2px 0 0 ${t.palette.divider}`)
+                      : 'none',
                   }
                 : {
                     ...(fieldError || showServerError ? { bgcolor: cellFill } : {}),
@@ -684,6 +698,28 @@ export function ProductSheetView({
     try {
       const { copied, skipped } = await copyProductsToClipboard(selected);
       copyToast(copied, skipped);
+    } catch (err) {
+      showError(getErrorMessage(err));
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const handleExportSelected = async () => {
+    const selected = displayProducts.filter((p) => selectedIds.has(p.id));
+    if (selected.length === 0) {
+      showWarning('Select at least one row to export');
+      return;
+    }
+    setCopying(true);
+    try {
+      // Sheet rows are lean (no images / long text) — refetch full docs for export.
+      const full = await Promise.all(selected.map((p) => productService.getById(p.id)));
+      exportProductsToExcel(full);
+      showSuccess(
+        `Exported ${full.length} product${full.length === 1 ? '' : 's'} `
+        + '(Bulk Add columns — import on Bulk Add).',
+      );
     } catch (err) {
       showError(getErrorMessage(err));
     } finally {
@@ -859,6 +895,7 @@ export function ProductSheetView({
               variant="contained"
               color="success"
               startIcon={<SaveIcon />}
+              loading={bulkMutation.isPending}
               disabled={!isDirty || bulkMutation.isPending}
               onClick={() => void handleSave()}
             >
@@ -885,6 +922,22 @@ export function ProductSheetView({
           >
             Copy selected
           </Button>
+        )}
+        {canBulkEdit && !bulkEditMode && (
+          <Tooltip title="Same columns as Bulk Add Import">
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<FileDownloadIcon />}
+                disabled={copying || selectedIds.size === 0}
+                loading={copying}
+                onClick={() => void handleExportSelected()}
+              >
+                Export selected
+              </Button>
+            </span>
+          </Tooltip>
         )}
         {canCreatePo && !bulkEditMode && (
           <Button
@@ -967,25 +1020,27 @@ export function ProductSheetView({
                   width: SHEET_SN_COL_WIDTH,
                   minWidth: SHEET_SN_COL_WIDTH,
                   maxWidth: SHEET_SN_COL_WIDTH,
-                  boxShadow: (t) => `2px 0 0 ${t.palette.divider}`,
+                  boxShadow: 'none',
                 }}
               >
                 #
               </TableCell>
               {PRODUCT_SHEET_COLUMNS.map((col, index) => {
                 const isName = col.key === 'name';
+                const isSku = col.key === 'sku';
                 const colWidth = col.width;
                 const headerStyle = {
                   ...(isPoPasteColumn(index) ? poHeaderSx : headerSx),
                   width: colWidth,
                   minWidth: colWidth,
                   maxWidth: colWidth,
-                  ...(isName
+                  ...((isName || isSku)
                     ? {
-                        left: STICKY_NAME_LEFT,
+                        left: isName ? STICKY_NAME_LEFT : STICKY_SKU_LEFT,
                         zIndex: 4,
-                        boxShadow: (t: Theme) =>
-                          `2px 0 0 ${t.palette.divider}`,
+                        boxShadow: isSku
+                          ? ((t: Theme) => `2px 0 0 ${t.palette.divider}`)
+                          : 'none',
                       }
                     : {}),
                 };

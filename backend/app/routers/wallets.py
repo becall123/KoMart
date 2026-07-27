@@ -66,7 +66,7 @@ async def get_ledger(
 async def transfer_funds(
     body: WalletTransferCreate,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_manager_or_above),
 ):
     await wl.ensure_backfill()
     out_e, in_e = await wl.create_transfer(

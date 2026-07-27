@@ -29,6 +29,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import BlockIcon from '@mui/icons-material/Block';
+import { SettingsSectionHeader } from '@/components/common/SettingsSectionHeader';
 import { useDiscountRules, useCreateDiscountRule, useUpdateDiscountRule, useDeleteDiscountRule } from '@/hooks/useDiscounts';
 import { useProducts } from '@/hooks/useProducts';
 import { useCategoryNames } from '@/hooks/useCategories';
@@ -235,17 +236,15 @@ export function DiscountsTab() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Box>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>Discount Rules</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Auto-apply promotions at POS. Leave coupon code empty for automatic rules.
-          </Typography>
-        </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-          Add Rule
-        </Button>
-      </Box>
+      <SettingsSectionHeader
+        title="Discount Rules"
+        description="Auto-apply promotions at POS. Leave coupon code empty for automatic rules."
+        action={(
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+            Add Rule
+          </Button>
+        )}
+      />
 
       {error && !dialogOpen && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 

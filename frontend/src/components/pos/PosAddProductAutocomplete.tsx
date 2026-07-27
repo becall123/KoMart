@@ -32,6 +32,8 @@ export function PosAddProductAutocomplete({
   const [value, setValue] = useState<Product | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [scanBusy, setScanBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [highlighted, setHighlighted] = useState<Product | null>(null);
   const debouncedSearch = useDebouncedValue(inputValue, 300);
 
   const { data, isFetching } = useProducts({
@@ -49,20 +51,12 @@ export function PosAddProductAutocomplete({
   const clearAndFocus = useCallback(() => {
     setValue(null);
     setInputValue('');
+    setHighlighted(null);
     requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
-  const tryAddFromScan = useCallback(async () => {
-    const code = inputValue.trim();
-    if (!code || scanBusy || disabled) return;
-
-    setScanBusy(true);
-    try {
-      const product = await resolvePosProductByScan(code, options);
-      if (!product) {
-        showWarning(`No product for barcode “${code}”.`);
-        return;
-      }
+  const addWithGuards = useCallback(
+    (product: Product) => {
       if (!isPosSellableProduct(product)) {
         showWarning(`“${product.name}” cannot be sold.`);
         return;
@@ -79,15 +73,35 @@ export function PosAddProductAutocomplete({
       }
       onAdd(product, packOnly);
       clearAndFocus();
+    },
+    [onAdd, clearAndFocus],
+  );
+
+  const tryAddFromScan = useCallback(async () => {
+    const code = inputValue.trim();
+    if (!code || scanBusy || disabled) return;
+
+    setScanBusy(true);
+    try {
+      const product = await resolvePosProductByScan(code, options);
+      if (!product) {
+        showWarning(`No product for barcode “${code}”.`);
+        return;
+      }
+      addWithGuards(product);
     } catch (err) {
       showApiError(err, 'Could not look up barcode.');
     } finally {
       setScanBusy(false);
     }
-  }, [inputValue, scanBusy, disabled, options, onAdd, clearAndFocus]);
+  }, [inputValue, scanBusy, disabled, options, addWithGuards]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+    // Let Autocomplete select the highlighted option.
+    if (open && highlighted) return;
+    // Popup open with options but no highlight — do not barcode-scan over a name search.
+    if (open && options.length > 0) return;
     e.preventDefault();
     void tryAddFromScan();
   };
@@ -99,6 +113,13 @@ export function PosAddProductAutocomplete({
       options={options}
       value={value}
       inputValue={inputValue}
+      open={open}
+      onOpen={() => setOpen(true)}
+      onClose={() => {
+        setOpen(false);
+        setHighlighted(null);
+      }}
+      onHighlightChange={(_, option) => setHighlighted(option)}
       filterOptions={(x) => x}
       onInputChange={(_, next, reason) => {
         if (reason === 'reset') return;
@@ -106,18 +127,7 @@ export function PosAddProductAutocomplete({
       }}
       onChange={(_, product) => {
         if (!product) return;
-        const packOnly = canSellAsPack(product) && !canSellAsPiece(product);
-        const opt = resolveSellOption(product, packOnly);
-        if (product.stock === 0) {
-          showWarning(`“${product.name}” is out of stock.`);
-          return;
-        }
-        if (opt.price <= 0) {
-          showWarning(`“${product.name}” has no selling price.`);
-          return;
-        }
-        onAdd(product, packOnly);
-        clearAndFocus();
+        addWithGuards(product);
       }}
       getOptionLabel={(p) => `${p.name} (${p.sku})`}
       isOptionEqualToValue={(a, b) => a.id === b.id}

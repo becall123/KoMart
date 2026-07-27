@@ -28,7 +28,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import BlockIcon from '@mui/icons-material/Block';
-import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import { SettingsSectionHeader } from '@/components/common/SettingsSectionHeader';
 import { useUsers, useCreateUser, useUpdateUser, useDeactivateUser } from '@/hooks/useUsers';
 import { useFormatDate } from '@/hooks/useFormatDate';
 import { getErrorMessage } from '@/services/apiClient';
@@ -123,19 +123,19 @@ export function UsersTab() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <PersonAddIcon color="primary" />
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>User Management</Typography>
-        </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => { setAddOpen(true); setForm(emptyForm); setError(''); }}
-        >
-          Add User
-        </Button>
-      </Box>
+      <SettingsSectionHeader
+        title="User Management"
+        description="Create and manage staff accounts and roles."
+        action={(
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => { setAddOpen(true); setForm(emptyForm); setError(''); }}
+          >
+            Add User
+          </Button>
+        )}
+      />
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {isError && (
@@ -144,8 +144,8 @@ export function UsersTab() {
         </Alert>
       )}
 
-      <TableContainer component={Paper}>
-        <Table>
+      <TableContainer component={Paper} variant="outlined">
+        <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell>Name</TableCell>

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query, Request
 from datetime import datetime, timezone
 from math import ceil
+import re
 
 from app.auth.dependencies import get_current_user, require_manager_or_above
 from app.models.user import User
@@ -27,7 +28,7 @@ from app.models.audit_log import AuditModule
 from app.services.audit import log_audit, product_snapshot
 from app.services.category_sync import resolve_category_fields, propagate_category_rename
 from app.services.product_pricing import compute_product_pricing, apply_pricing_to_dict
-from app.services.sku import generate_unique_sku
+from app.services.sku import generate_unique_sku, peek_unique_sku
 from app.services.store_settings import get_store_settings
 from app.services.product_list import to_list_lean
 
@@ -39,6 +40,27 @@ async def _resolve_supplier(supplier_id: str) -> Supplier:
     if not supplier:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Supplier not found")
     return supplier
+
+
+async def _assert_unique_product_name(
+    name: str,
+    *,
+    exclude_id: str | None = None,
+) -> None:
+    """Case-insensitive unique name among active products."""
+    key = (name or "").strip()
+    if not key:
+        return
+    escaped = re.escape(key)
+    existing = await Product.find_one(
+        Product.is_active == True,  # noqa: E712
+        {"name": {"$regex": f"^{escaped}$", "$options": "i"}},
+    )
+    if existing and (not exclude_id or str(existing.id) != str(exclude_id)):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"Product name '{key}' already exists",
+        )
 
 
 async def _resolve_product_sku(
@@ -113,6 +135,12 @@ async def _apply_product_update(
         else:
             update_data["supplier_name"] = ""
 
+    if "name" in update_data:
+        await _assert_unique_product_name(
+            update_data["name"],
+            exclude_id=str(product.id),
+        )
+
     merged = {**product.model_dump(), **update_data}
     unit_src, pack_src = _pricing_sources(fields)
     pricing = apply_pricing_to_dict(
@@ -183,6 +211,7 @@ async def list_products(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     search: str = Query(""),
+    exact_code: str = Query(""),
     category: str = Query(""),
     supplier_id: str = Query(""),
     status: str = Query("", pattern="^(|active|discontinued|seasonal)$"),
@@ -192,6 +221,7 @@ async def list_products(
     sort_by: str = Query("", pattern="^(|name|sku|selling_price|sellingPrice|created_at|createdAt)$"),
     sort_order: str = Query("", pattern="^(|asc|desc)$"),
     include_images: bool = Query(True),
+    lean: bool = Query(True),
     _: User = Depends(get_current_user),
 ):
     query = Product.find(Product.is_active == True)  # noqa: E712
@@ -208,7 +238,14 @@ async def list_products(
         ]})
     elif status:
         query = query.find(Product.status == ProductStatus(status))
-    if search:
+    code = exact_code.strip()
+    if code:
+        escaped = re.escape(code)
+        query = query.find({"$or": [
+            {"sku": {"$regex": f"^{escaped}$", "$options": "i"}},
+            {"barcode": {"$regex": f"^{escaped}$", "$options": "i"}},
+        ]})
+    elif search:
         query = query.find({"$or": [
             {"name": {"$regex": search, "$options": "i"}},
             {"sku": {"$regex": search, "$options": "i"}},
@@ -232,15 +269,22 @@ async def list_products(
         query = query.sort((db_sort_field, direction))
 
     total = await query.count()
-    products = await to_list_lean(
-        query,
-        skip=(page - 1) * page_size,
-        limit=page_size,
-        include_images=include_images,
-    )
+    skip = (page - 1) * page_size
+    if lean:
+        products = await to_list_lean(
+            query,
+            skip=skip,
+            limit=page_size,
+            include_images=include_images,
+        )
+        data = [_to_response(p, lean=True, include_images=include_images) for p in products]
+    else:
+        # Full documents for Excel / Bulk Add round-trip (all images + text fields).
+        products = await query.skip(skip).limit(page_size).to_list()
+        data = [_to_response(p, lean=False, include_images=True) for p in products]
 
     return PaginatedResponse(
-        data=[_to_response(p, lean=True, include_images=include_images) for p in products],
+        data=data,
         total=total,
         page=page,
         page_size=page_size,
@@ -253,11 +297,20 @@ async def suggest_skus(
     body: SkuSuggestRequest,
     _: User = Depends(get_current_user),
 ):
-    """Suggest unique SKUs for preview before create."""
+    """Suggest unique SKUs for preview without burning next_sku_seq (allocate on create only)."""
     exclude = {value.strip() for value in body.exclude if value.strip()}
+    # Per-category cursor so multiple peeks in one request stay consecutive without $inc.
+    next_seq_by_category: dict[str, int] = {}
     skus: list[str] = []
     for item in body.items:
-        sku = await generate_unique_sku(item.brand, item.category, exclude=exclude)
+        cat_key = (item.category or "").strip().lower()
+        sku, next_seq = await peek_unique_sku(
+            item.brand,
+            item.category,
+            exclude=exclude,
+            start_seq=next_seq_by_category.get(cat_key),
+        )
+        next_seq_by_category[cat_key] = next_seq
         exclude.add(sku)
         skus.append(sku)
     return SkuSuggestResponse(skus=skus)
@@ -283,6 +336,7 @@ async def create_product(
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     if await Product.find_one(Product.sku == sku):
         raise HTTPException(status.HTTP_409_CONFLICT, detail="SKU already exists")
+    await _assert_unique_product_name(body.name)
     supplier_name = ""
     if body.supplier_id:
         supplier = await _resolve_supplier(body.supplier_id)
@@ -354,6 +408,7 @@ async def bulk_create_products(
     created = 0
     errors: list[ProductBulkCreateError] = []
     seen_skus: set[str] = set()
+    seen_names: set[str] = set()
 
     for item in body.products:
         try:
@@ -367,17 +422,28 @@ async def bulk_create_products(
         except HTTPException as exc:
             errors.append(ProductBulkCreateError(row=item.row, sku=item.sku.strip(), detail=str(exc.detail)))
             continue
+        except Exception as exc:
+            errors.append(ProductBulkCreateError(row=item.row, sku=item.sku.strip(), detail=str(exc)))
+            continue
 
         if sku in seen_skus:
             errors.append(ProductBulkCreateError(row=item.row, sku=sku, detail="Duplicate SKU in this import"))
             continue
         seen_skus.add(sku)
 
-        if await Product.find_one(Product.sku == sku):
-            errors.append(ProductBulkCreateError(row=item.row, sku=sku, detail="SKU already exists"))
+        name_key = (item.name or "").strip().lower()
+        if name_key and name_key in seen_names:
+            errors.append(ProductBulkCreateError(row=item.row, sku=sku, detail="Duplicate name in this import"))
             continue
 
         try:
+            if await Product.find_one(Product.sku == sku):
+                errors.append(ProductBulkCreateError(row=item.row, sku=sku, detail="SKU already exists"))
+                continue
+            await _assert_unique_product_name(item.name)
+            if name_key:
+                seen_names.add(name_key)
+
             supplier_name = ""
             if item.supplier_id:
                 supplier = await _resolve_supplier(item.supplier_id)
@@ -412,6 +478,8 @@ async def bulk_create_products(
             created += 1
         except HTTPException as exc:
             errors.append(ProductBulkCreateError(row=item.row, sku=sku, detail=str(exc.detail)))
+        except Exception as exc:
+            errors.append(ProductBulkCreateError(row=item.row, sku=sku, detail=str(exc)))
 
     return ProductBulkCreateResponse(created=created, errors=errors)
 

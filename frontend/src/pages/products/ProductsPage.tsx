@@ -272,7 +272,8 @@ export function ProductsPage() {
           ...sharedParams,
           page: pageNum,
           pageSize: 100,
-          includeImages: false,
+          includeImages: true,
+          lean: false,
         });
         all.push(...res.data);
         totalPages = res.totalPages ?? 1;
@@ -280,8 +281,11 @@ export function ProductsPage() {
       } while (pageNum <= totalPages);
 
       const filtered = filterByStock(all, stockFilter);
-      exportProductsToExcel(filtered, { includeCost: canManage });
-      showSuccess(`Exported ${filtered.length} products.`);
+      exportProductsToExcel(filtered);
+      showSuccess(
+        `Exported ${filtered.length} product${filtered.length === 1 ? '' : 's'} `
+        + '(Bulk Add columns — import on Bulk Add).',
+      );
     } catch (err) {
       showApiError(err, 'Could not export products.');
     } finally {
@@ -304,14 +308,19 @@ export function ProductsPage() {
         action={
           canManage ? (
             <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button
-                variant="outlined"
-                startIcon={<FileDownloadIcon />}
-                onClick={() => void handleExportExcel()}
-                disabled={exporting}
-              >
-                {exporting ? 'Exporting…' : 'Export Excel'}
-              </Button>
+              <Tooltip title="Same columns as Bulk Add Import — edit offline, then Import on Bulk Add">
+                <span>
+                  <Button
+                    variant="outlined"
+                    startIcon={<FileDownloadIcon />}
+                    onClick={() => void handleExportExcel()}
+                    loading={exporting}
+                    disabled={exporting}
+                  >
+                    Export Excel
+                  </Button>
+                </span>
+              </Tooltip>
               <Button variant="outlined" startIcon={<ContentPasteIcon />} onClick={() => navigate('/products/bulk-add')}>
                 Bulk Add
               </Button>

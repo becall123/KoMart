@@ -12,6 +12,6 @@ export const PO_LABELS = {
   expiryOptional: 'Expiry (optional)',
 } as const;
 
-export const PO_PASTE_HINT = `${PO_LABELS.sku} · ${PO_LABELS.packQty} · ${PO_LABELS.buyUom} · ${PO_LABELS.unitCost} · ${PO_LABELS.unitsPerPack}`;
+export const PO_PASTE_HINT = `${PO_LABELS.sku} · ${PO_LABELS.product} · ${PO_LABELS.packQty} · ${PO_LABELS.buyUom} · ${PO_LABELS.unitsPerPack} · ${PO_LABELS.unitCost}`;
 
 export const PO_RECEIVE_HINT = 'Pack qty is in Primary Unit. Total units = pack qty × conversion rate.';

@@ -93,6 +93,8 @@ export function useRecordPurchaseOrderPayment() {
       void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.purchaseOrder(id) });
       void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.expenses });
       void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.expenseStats });
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.wallets });
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.walletBalances });
     },
   });
 }

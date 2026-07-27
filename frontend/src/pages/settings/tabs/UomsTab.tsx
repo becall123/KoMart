@@ -25,7 +25,7 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import StraightenIcon from '@mui/icons-material/Straighten';
+import { SettingsSectionHeader } from '@/components/common/SettingsSectionHeader';
 import { useUoms, useCreateUom, useUpdateUom, useDeleteUom } from '@/hooks/useUoms';
 import { useAuthStore } from '@/store';
 import { isAdmin } from '@/utils';
@@ -118,31 +118,27 @@ export function UomsTab() {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <StraightenIcon color="primary" />
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>Units of Measure</Typography>
-        </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => { setAddOpen(true); setNewCode(''); setNewLabel(''); setNewDesc(''); setError(''); }}
-        >
-          Add UOM
-        </Button>
-      </Box>
-
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Manage units used on products (e.g. pcs, pack, kg). The code is stored on product records.
-      </Typography>
+      <SettingsSectionHeader
+        title="Units of Measure"
+        description="Manage units used on products (e.g. pcs, pack, kg). The code is stored on product records."
+        action={(
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => { setAddOpen(true); setNewCode(''); setNewLabel(''); setNewDesc(''); setError(''); }}
+          >
+            Add UOM
+          </Button>
+        )}
+      />
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {isLoading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
       ) : (
-        <TableContainer component={Paper}>
-          <Table>
+        <TableContainer component={Paper} variant="outlined">
+          <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell>Code</TableCell>

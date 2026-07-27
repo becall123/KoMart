@@ -28,7 +28,7 @@ export function findExactBarcodeOrSku(list: Product[], code: string): Product | 
 
 /**
  * Resolve a scanned/typed barcode or SKU: try in-memory candidates first,
- * then API search + exact match.
+ * then exact barcode/SKU API lookup (not substring search).
  */
 export async function resolvePosProductByScan(
   code: string,
@@ -41,7 +41,7 @@ export async function resolvePosProductByScan(
   if (product) return product;
 
   const res = await productService.getAll({
-    search: trimmed,
+    exactCode: trimmed,
     sellableOnly: true,
     pageSize: 10,
     includeImages: false,

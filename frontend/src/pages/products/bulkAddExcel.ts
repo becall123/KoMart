@@ -1,12 +1,13 @@
 import * as XLSX from 'xlsx';
 import { PRODUCT_FIELD_LABELS } from '@/constants/productFieldLabels';
+import type { Product } from '@/types';
 import {
   type BulkAddField,
   type BulkAddRow,
   emptyBulkAddRow,
 } from './bulkAddValidation';
 
-/** Header labels used in sample + import (order = column order). */
+/** Header labels used in sample + import + export (order = column order). */
 export const BULK_ADD_IMPORT_HEADERS: { field: BulkAddField; label: string }[] = [
   { field: 'name', label: PRODUCT_FIELD_LABELS.name },
   { field: 'sku', label: PRODUCT_FIELD_LABELS.sku },
@@ -35,6 +36,50 @@ export const BULK_ADD_IMPORT_HEADERS: { field: BulkAddField; label: string }[] =
   { field: 'images', label: PRODUCT_FIELD_LABELS.images },
 ];
 
+function joinList(values: string[] | undefined | null): string {
+  if (!values?.length) return '';
+  return values.map((v) => String(v).trim()).filter(Boolean).join(', ');
+}
+
+function numCell(value: number | undefined | null): string | number {
+  if (value === undefined || value === null || Number.isNaN(value)) return '';
+  return value;
+}
+
+/**
+ * Serialize a catalog product into Bulk Add Excel cells (same order as import headers).
+ * Values are import-friendly (supplier name, raw status/sellMode, comma-joined lists).
+ */
+export function productToBulkAddExportCells(product: Product): (string | number)[] {
+  const byField: Record<BulkAddField, string | number> = {
+    name: product.name ?? '',
+    sku: product.sku ?? '',
+    brand: product.brand ?? '',
+    category: product.category ?? '',
+    barcode: product.barcode ?? '',
+    supplierId: product.supplierName ?? '',
+    countryOfOrigin: product.countryOfOrigin ?? '',
+    description: product.description ?? '',
+    buyUom: product.buyUom ?? product.uom ?? '',
+    uom: product.uom ?? '',
+    unitsPerBuyUom: numCell(product.unitsPerBuyUom ?? 1),
+    sellMode: product.sellMode ?? 'both',
+    costPrice: numCell(product.costPrice),
+    sellingPrice: numCell(product.sellingPrice),
+    packSellingPrice: numCell(product.packSellingPrice),
+    discountPercent: numCell(product.discountPercent),
+    offeredPrice: numCell(product.offeredPrice),
+    packDiscountPercent: numCell(product.packDiscountPercent),
+    packOfferedPrice: numCell(product.packOfferedPrice),
+    lowStockThreshold: numCell(product.lowStockThreshold),
+    status: product.status ?? 'active',
+    tags: joinList(product.tags),
+    nutritionInfo: product.nutritionInfo ?? '',
+    allergenInfo: product.allergenInfo ?? '',
+    images: joinList(product.images),
+  };
+  return BULK_ADD_IMPORT_HEADERS.map((col) => byField[col.field]);
+}
 const HEADER_ALIASES: Record<string, BulkAddField> = {
   sku: 'sku',
   code: 'sku',

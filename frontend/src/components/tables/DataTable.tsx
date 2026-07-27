@@ -46,7 +46,7 @@ export function DataTable<T>({
   rows,
   loading,
   page = 0,
-  pageSize = 10,
+  pageSize = 25,
   total,
   onPageChange,
   onPageSizeChange,
