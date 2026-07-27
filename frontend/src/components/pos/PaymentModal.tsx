@@ -15,7 +15,6 @@ import {
   Paper,
   Chip,
   IconButton,
-  Autocomplete,
   FormControlLabel,
   Checkbox,
   MenuItem,
@@ -24,6 +23,7 @@ import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import { CustomerPicker } from '@/components/pos/CustomerPicker';
+import { PosAddProductAutocomplete } from '@/components/pos/PosAddProductAutocomplete';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -34,9 +34,8 @@ import { useCheckoutDraft, type CartMutators, type CheckoutDiscountType } from '
 import { useFormatDate } from '@/hooks/useFormatDate';
 import { ReceiptView } from '@/components/pos/ReceiptView';
 import { ReceiptActions } from '@/components/pos/ReceiptActions';
-import type { AppliedPromotion, CartItem, PaymentMethod, Product, ReceiptBranding, Transaction } from '@/types';
+import type { AppliedPromotion, CartItem, PaymentMethod, ReceiptBranding, Transaction } from '@/types';
 import { printTransactionReceipt } from '@/utils/receiptPrint';
-import { isPosSellableProduct } from '@/utils/uomSell';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -71,7 +70,6 @@ interface PaymentModalProps {
   initialDiscountType?: CheckoutDiscountType;
   initialDiscountInput?: number;
   initialLoyaltyPointsRedeemed?: number;
-  products: Product[];
   productCategoryMap: Record<string, string>;
   customerId: string | null;
   onCustomerChange: (id: string | null) => void;
@@ -130,7 +128,6 @@ export function PaymentModal({
   initialDiscountType = null,
   initialDiscountInput = 0,
   initialLoyaltyPointsRedeemed = 0,
-  products,
   productCategoryMap,
   customerId,
   onCustomerChange,
@@ -151,8 +148,6 @@ export function PaymentModal({
   const [method, setMethod] = useState<PaymentMethod>('cash');
   const [tendered, setTendered] = useState('');
   const [roundOffEnabled, setRoundOffEnabled] = useState(false);
-  const [addProductValue, setAddProductValue] = useState<Product | null>(null);
-  const [addProductInput, setAddProductInput] = useState('');
   const printedTxnId = useRef<string | null>(null);
   const openSessionRef = useRef(false);
   const customerIdAtOpenRef = useRef<string | null>(customerId);
@@ -166,11 +161,6 @@ export function PaymentModal({
 
   const draft = useCheckoutDraft(items, productCategoryMap, cartMutators);
   const formatDate = useFormatDate();
-
-  const sellableProducts = useMemo(
-    () => products.filter(isPosSellableProduct),
-    [products],
-  );
 
   useEffect(() => {
     if (!open) {
@@ -189,8 +179,6 @@ export function PaymentModal({
     setMethod(resolvedDefaultMethod);
     setTendered('');
     setRoundOffEnabled(false);
-    setAddProductValue(null);
-    setAddProductInput('');
     printedTxnId.current = null;
   }, [
     open,
@@ -478,25 +466,8 @@ export function PaymentModal({
               </Box>
             </Box>
 
-            <Autocomplete
-              size="small"
-              options={sellableProducts}
-              value={addProductValue}
-              inputValue={addProductInput}
-              onInputChange={(_, value, reason) => {
-                if (reason === 'reset') return;
-                setAddProductInput(value);
-              }}
-              onChange={(_, product) => {
-                if (!product) return;
-                draft.addProduct(product);
-                setAddProductValue(null);
-                setAddProductInput('');
-              }}
-              getOptionLabel={(p) => `${p.name} (${p.sku})`}
-              clearOnBlur
-              blurOnSelect
-              renderInput={(params) => <TextField {...params} label="Add product" placeholder="Search products…" />}
+            <PosAddProductAutocomplete
+              onAdd={(product, asPack) => draft.addProduct(product, asPack)}
             />
           </Box>
 

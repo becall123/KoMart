@@ -33,7 +33,6 @@ import {
   ToggleButton,
   Chip,
   CircularProgress,
-  Autocomplete,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
@@ -58,7 +57,7 @@ import { useCreateCustomer, useCustomer } from '@/hooks/useCustomers';
 import { useSuppliers } from '@/hooks/useSuppliers';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 import { useCartStore, useAuthStore } from '@/store';
-import { transactionService, productService } from '@/services';
+import { transactionService } from '@/services';
 import { getErrorMessage } from '@/services/apiClient';
 import { showSuccess, showWarning, showApiError } from '@/utils/toast';
 import { formatAmount, formatCurrency } from '@/utils';
@@ -69,6 +68,8 @@ import { cartLineKey } from '@/utils/cartLine';
 import { uomLabel } from '@/utils';
 import { canSellAsPack, canSellAsPiece, isPosSellableProduct, packSellOption, pieceSellOption, resolveSellOption } from '@/utils/uomSell';
 import { PaymentModal, type PaymentConfirmPayload } from '@/components/pos/PaymentModal';
+import { PosAddProductAutocomplete } from '@/components/pos/PosAddProductAutocomplete';
+import { resolvePosProductByScan } from '@/components/pos/posProductLookup';
 import { PriceWithUom } from '@/components/products/PriceWithUom';
 import { ProductQuickViewDialog } from '@/components/products/ProductQuickViewDialog';
 import { DRAWER_COLLAPSED } from '@/layouts/Sidebar';
@@ -538,8 +539,6 @@ export function POSPage() {
   const [custForm, setCustForm] = useState<CreateCustForm>(EMPTY_FORM);
   const [custFormError, setCustFormError] = useState('');
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
-  const [cartAddProduct, setCartAddProduct] = useState<Product | null>(null);
-  const [cartAddInput, setCartAddInput] = useState('');
 
   const queryClient = useQueryClient();
   const { items, addItem, removeItem, updateQuantity, customerId, setCustomer, clearCart, replaceCart, saleDate, setSaleDate } = useCartStore();
@@ -700,42 +699,13 @@ export function POSPage() {
     });
   }, [addItem]);
 
-  const findExactBarcodeOrSku = useCallback((list: Product[], code: string): Product | undefined => {
-    const key = code.trim().toLowerCase();
-    if (!key) return undefined;
-    const byBarcode = list.filter((p) => (p.barcode ?? '').trim().toLowerCase() === key);
-    if (byBarcode.length > 0) {
-      if (byBarcode.length > 1) {
-        showWarning(`Multiple products share barcode ${code}; added first match.`);
-      }
-      return byBarcode[0];
-    }
-    const bySku = list.filter((p) => (p.sku ?? '').trim().toLowerCase() === key);
-    if (bySku.length > 0) {
-      if (bySku.length > 1) {
-        showWarning(`Multiple products share SKU ${code}; added first match.`);
-      }
-      return bySku[0];
-    }
-    return undefined;
-  }, []);
-
   const handleBarcodeScan = useCallback(async () => {
     const code = search.trim();
     if (!code || barcodeLookupBusy || paymentOpen) return;
 
     setBarcodeLookupBusy(true);
     try {
-      let product = findExactBarcodeOrSku(products, code);
-      if (!product) {
-        const res = await productService.getAll({
-          search: code,
-          sellableOnly: true,
-          pageSize: 10,
-          includeImages: false,
-        });
-        product = findExactBarcodeOrSku(res.data, code);
-      }
+      const product = await resolvePosProductByScan(code, products);
 
       if (!product) {
         showWarning(`No product for barcode “${code}”.`);
@@ -771,7 +741,6 @@ export function POSPage() {
     barcodeLookupBusy,
     paymentOpen,
     products,
-    findExactBarcodeOrSku,
     handleAddProduct,
   ]);
 
@@ -1238,29 +1207,7 @@ export function POSPage() {
         </Box>
 
         <Box sx={{ flexShrink: 0, mb: 1 }}>
-          <Autocomplete
-            size="small"
-            options={addableProducts}
-            value={cartAddProduct}
-            inputValue={cartAddInput}
-            onInputChange={(_, value, reason) => {
-              if (reason === 'reset') return;
-              setCartAddInput(value);
-            }}
-            onChange={(_, product) => {
-              if (!product) return;
-              handleAddProduct(product);
-              setCartAddProduct(null);
-              setCartAddInput('');
-            }}
-            getOptionLabel={(p) => `${p.name} (${p.sku})`}
-            isOptionEqualToValue={(a, b) => a.id === b.id}
-            clearOnBlur
-            blurOnSelect
-            renderInput={(params) => (
-              <TextField {...params} label="Add product" placeholder="Search products…" />
-            )}
-          />
+          <PosAddProductAutocomplete onAdd={handleAddProduct} />
         </Box>
 
         {/* Footer: totals + pay — always visible */}
@@ -1317,7 +1264,6 @@ export function POSPage() {
         open={paymentOpen}
         items={items}
         cartMutators={cartMutators}
-        products={products}
         productCategoryMap={productCategoryMap}
         customerId={customerId}
         onCustomerChange={setCustomer}
