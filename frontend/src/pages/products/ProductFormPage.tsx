@@ -262,7 +262,6 @@ export function ProductFormPage() {
     }
   }, [isEditing, storeSettings, setValue]);
 
-  const brand = watch('brand');
   const category = watch('category');
   const buyUom = watch('buyUom');
   const sellUom = watch('uom');

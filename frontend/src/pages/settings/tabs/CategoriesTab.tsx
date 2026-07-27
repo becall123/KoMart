@@ -230,7 +230,7 @@ export function CategoriesTab() {
               onChange={(e) => setNewCode(normalizeCodeInput(e.target.value))}
               placeholder="01"
               helperText="Used as first 2 digits of product SKU (01–99). Cannot change after create."
-              inputProps={{ inputMode: 'numeric', maxLength: 2 }}
+              slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 2 } }}
             />
             <TextField
               label="Description (optional)"

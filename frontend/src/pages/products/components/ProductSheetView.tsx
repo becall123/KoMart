@@ -18,6 +18,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import type { Theme } from '@mui/material/styles';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
@@ -100,7 +101,7 @@ const headerSx = {
 
 const poHeaderSx = {
   ...headerSx,
-  bgcolor: (t: { palette: { mode: string; grey: Record<number, string> } }) =>
+  bgcolor: (t: Theme) =>
     (t.palette.mode === 'dark' ? t.palette.grey[800] : t.palette.grey[100]),
 };
 
@@ -120,7 +121,7 @@ const STICKY_NAME_LEFT = SHEET_CHECKBOX_COL_WIDTH + SHEET_SN_COL_WIDTH;
 
 /** Opaque fills only — alpha tokens (action.hover) make sticky cells unreadable. */
 function stickyRowBg(rowDirty: boolean, rowIndex: number, selected: boolean) {
-  return (t: { palette: { mode: string; background: { paper: string }; grey: Record<number, string>; warning: { light: string }; action: { selected: string } } }) => {
+  return (t: Theme) => {
     if (selected) {
       return t.palette.mode === 'dark' ? t.palette.grey[800] : t.palette.grey[200];
     }
@@ -134,7 +135,7 @@ function stickyRowBg(rowDirty: boolean, rowIndex: number, selected: boolean) {
   };
 }
 
-function stickyErrorBg(t: { palette: { mode: string; error: { dark: string }; grey: Record<number, string> } }) {
+function stickyErrorBg(t: Theme) {
   return t.palette.mode === 'dark' ? t.palette.grey[800] : '#fdecea';
 }
 
@@ -554,7 +555,7 @@ const SheetRow = memo(function SheetRow({
                 : {
                     ...(fieldError || showServerError ? { bgcolor: cellFill } : {}),
                   }),
-              color: !hasSku && col.key === 'sku' ? 'error.main' : undefined,
+              color: !hasSku && col.key === 'sku' ? 'error.main' : 'inherit',
             }}
             title={fieldError ?? (showServerError || undefined)}
           >
@@ -983,7 +984,7 @@ export function ProductSheetView({
                     ? {
                         left: STICKY_NAME_LEFT,
                         zIndex: 4,
-                        boxShadow: (t: { palette: { divider: string } }) =>
+                        boxShadow: (t: Theme) =>
                           `2px 0 0 ${t.palette.divider}`,
                       }
                     : {}),
