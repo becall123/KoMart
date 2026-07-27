@@ -46,6 +46,38 @@ function numCell(value: number | undefined | null): string | number {
   return value;
 }
 
+/** Excel / OOXML single-cell text limit. */
+export const EXCEL_MAX_CELL_CHARS = 32767;
+
+function isDataUrl(value: string): boolean {
+  return value.trim().toLowerCase().startsWith('data:');
+}
+
+/** Truncate so SheetJS / Excel never reject the workbook. */
+export function clampExcelCell(value: string | number): string | number {
+  if (typeof value !== 'string') return value;
+  if (value.length <= EXCEL_MAX_CELL_CHARS) return value;
+  return `${value.slice(0, EXCEL_MAX_CELL_CHARS - 1)}…`;
+}
+
+/**
+ * Export-safe image list: keep http(s) / relative URLs; drop base64 data URLs
+ * (FileReader uploads) which exceed Excel’s cell limit.
+ */
+export function formatImagesForExcel(images: string[] | undefined | null): string {
+  const urls = (images ?? [])
+    .map((v) => String(v).trim())
+    .filter((v) => v && !isDataUrl(v) && v.length < EXCEL_MAX_CELL_CHARS);
+  return joinList(urls);
+}
+
+export function countEmbeddedImages(products: Product[]): number {
+  return products.reduce(
+    (n, p) => n + (p.images ?? []).filter((img) => isDataUrl(String(img ?? ''))).length,
+    0,
+  );
+}
+
 /**
  * Serialize a catalog product into Bulk Add Excel cells (same order as import headers).
  * Values are import-friendly (supplier name, raw status/sellMode, comma-joined lists).
@@ -76,9 +108,9 @@ export function productToBulkAddExportCells(product: Product): (string | number)
     tags: joinList(product.tags),
     nutritionInfo: product.nutritionInfo ?? '',
     allergenInfo: product.allergenInfo ?? '',
-    images: joinList(product.images),
+    images: formatImagesForExcel(product.images),
   };
-  return BULK_ADD_IMPORT_HEADERS.map((col) => byField[col.field]);
+  return BULK_ADD_IMPORT_HEADERS.map((col) => clampExcelCell(byField[col.field]));
 }
 const HEADER_ALIASES: Record<string, BulkAddField> = {
   sku: 'sku',

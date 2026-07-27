@@ -2,13 +2,21 @@ import * as XLSX from 'xlsx';
 import type { Product } from '@/types';
 import {
   BULK_ADD_IMPORT_HEADERS,
+  countEmbeddedImages,
   productToBulkAddExportCells,
 } from '@/pages/products/bulkAddExcel';
 
+export interface ExportProductsResult {
+  count: number;
+  /** Base64 / data-URL images omitted (Excel 32k cell limit). */
+  skippedEmbeddedImages: number;
+}
+
 /** Export products using the Bulk Add column contract (round-trip with Import Excel). */
-export function exportProductsToExcel(products: Product[]): void {
+export function exportProductsToExcel(products: Product[]): ExportProductsResult {
   const headers = BULK_ADD_IMPORT_HEADERS.map((h) => h.label);
   const rows = products.map((p) => productToBulkAddExportCells(p));
+  const skippedEmbeddedImages = countEmbeddedImages(products);
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   ws['!cols'] = headers.map((h) => ({ wch: Math.max(12, h.length + 2) }));
@@ -16,4 +24,6 @@ export function exportProductsToExcel(products: Product[]): void {
   XLSX.utils.book_append_sheet(wb, ws, 'Bulk Add');
   const date = new Date().toISOString().slice(0, 10);
   XLSX.writeFile(wb, `komart-products-${date}.xlsx`);
+
+  return { count: products.length, skippedEmbeddedImages };
 }

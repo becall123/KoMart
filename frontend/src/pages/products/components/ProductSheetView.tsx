@@ -715,11 +715,17 @@ export function ProductSheetView({
     try {
       // Sheet rows are lean (no images / long text) — refetch full docs for export.
       const full = await Promise.all(selected.map((p) => productService.getById(p.id)));
-      exportProductsToExcel(full);
+      const { count, skippedEmbeddedImages } = exportProductsToExcel(full);
       showSuccess(
-        `Exported ${full.length} product${full.length === 1 ? '' : 's'} `
+        `Exported ${count} product${count === 1 ? '' : 's'} `
         + '(Bulk Add columns — import on Bulk Add).',
       );
+      if (skippedEmbeddedImages > 0) {
+        showWarning(
+          `${skippedEmbeddedImages} uploaded (embedded) image${skippedEmbeddedImages === 1 ? '' : 's'} `
+          + 'omitted — Excel cannot store base64 images. Use image URLs for round-trip export.',
+        );
+      }
     } catch (err) {
       showError(getErrorMessage(err));
     } finally {

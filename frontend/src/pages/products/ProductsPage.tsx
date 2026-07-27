@@ -44,7 +44,7 @@ import type { Product, ProductStatus } from '@/types';
 import { ProductSheetView } from '@/pages/products/components/ProductSheetView';
 import { filterByStock, type StockFilter } from '@/pages/products/productStockFilter';
 import { exportProductsToExcel } from '@/pages/products/exportProductsExcel';
-import { showApiError, showSuccess } from '@/utils/toast';
+import { showApiError, showSuccess, showWarning } from '@/utils/toast';
 
 const SHEET_PAGE_SIZE = 25;
 
@@ -281,11 +281,17 @@ export function ProductsPage() {
       } while (pageNum <= totalPages);
 
       const filtered = filterByStock(all, stockFilter);
-      exportProductsToExcel(filtered);
+      const { count, skippedEmbeddedImages } = exportProductsToExcel(filtered);
       showSuccess(
-        `Exported ${filtered.length} product${filtered.length === 1 ? '' : 's'} `
+        `Exported ${count} product${count === 1 ? '' : 's'} `
         + '(Bulk Add columns — import on Bulk Add).',
       );
+      if (skippedEmbeddedImages > 0) {
+        showWarning(
+          `${skippedEmbeddedImages} uploaded (embedded) image${skippedEmbeddedImages === 1 ? '' : 's'} `
+          + 'omitted — Excel cannot store base64 images. Use image URLs for round-trip export.',
+        );
+      }
     } catch (err) {
       showApiError(err, 'Could not export products.');
     } finally {
