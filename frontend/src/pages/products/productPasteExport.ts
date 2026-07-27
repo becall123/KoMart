@@ -1,15 +1,16 @@
 import { productStatusLabel } from '@/utils';
 import type { Product } from '@/types';
 import {
-  PRODUCT_SHEET_COLUMNS,
   PO_PASTE_COLUMN_COUNT,
+  PO_PASTE_HEADERS,
+  PRODUCT_SHEET_COLUMNS,
   productToSheetCells,
 } from '@/pages/products/productSheetColumnDefs';
 import { buyUnitCost } from '@/utils/productPricing';
 
 export const PRODUCT_SHEET_HEADERS = PRODUCT_SHEET_COLUMNS.map((c) => c.label);
 
-export { PO_PASTE_COLUMN_COUNT };
+export { PO_PASTE_COLUMN_COUNT, PO_PASTE_HEADERS };
 
 export { buyUnitCost };
 
@@ -17,7 +18,7 @@ function formatCost(value: number): string {
   return Number.isFinite(value) ? value.toFixed(2) : '0.00';
 }
 
-/** PO paste rows — first 6 columns only. */
+/** PO paste rows — fixed 6-cell layout for PO line grid. */
 export function productToPoPasteCells(product: Product): string[] {
   return [
     product.sku ?? '',
@@ -41,10 +42,9 @@ export function productsToTsv(
   options: { includeHeader?: boolean } = {},
 ): string {
   const { includeHeader = true } = options;
-  const poHeaders = PRODUCT_SHEET_COLUMNS.slice(0, PO_PASTE_COLUMN_COUNT).map((c) => c.label);
   const lines: string[] = [];
   if (includeHeader) {
-    lines.push(poHeaders.join('\t'));
+    lines.push([...PO_PASTE_HEADERS].join('\t'));
   }
   for (const product of products) {
     lines.push(productToPoPasteCells(product).map(escapeTsvCell).join('\t'));

@@ -4,6 +4,7 @@ export {
   PO_COLUMN_END_INDEX,
   EXTRA_COLUMN_START_INDEX,
   PO_PASTE_COLUMN_COUNT,
+  PO_PASTE_HEADERS,
   productSheetColWidths,
   productSheetTableMinWidth,
   isPoPasteColumn,

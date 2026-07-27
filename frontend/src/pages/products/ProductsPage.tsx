@@ -446,8 +446,8 @@ export function ProductsPage() {
               <GridViewIcon fontSize="small" />
             </Tooltip>
           </ToggleButton>
-          <ToggleButton value="sheet" aria-label="Sheet view">
-            <Tooltip title="Sheet view (copy for PO)">
+          <ToggleButton value="sheet" aria-label="Bulk Edit">
+            <Tooltip title="Bulk Edit">
               <TableRowsIcon fontSize="small" />
             </Tooltip>
           </ToggleButton>

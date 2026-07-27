@@ -5,6 +5,7 @@ import {
   Button,
   Checkbox,
   CircularProgress,
+  IconButton,
   Paper,
   Table,
   TableBody,
@@ -14,17 +15,19 @@ import {
   TablePagination,
   TableRow,
   TableSortLabel,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CloseIcon from '@mui/icons-material/Close';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { useNavigate } from 'react-router-dom';
 import { getErrorMessage } from '@/services/apiClient';
 import type { ListQueryParams, Product, ProductBulkUpdateItem, ProductStatus, Supplier } from '@/types';
-import { showSuccess, showWarning, showError } from '@/utils/toast';
+import { showSuccess, showWarning, showError, showInfo } from '@/utils/toast';
 import { copyProductsToClipboard } from '@/pages/products/productPasteExport';
 import {
   filterByStock,
@@ -32,7 +35,8 @@ import {
 } from '@/pages/products/productStockFilter';
 import {
   PRODUCT_SHEET_COLUMNS,
-  EXTRA_COLUMN_START_INDEX,
+  SHEET_CHECKBOX_COL_WIDTH,
+  SHEET_SN_COL_WIDTH,
   isPoPasteColumn,
   isSheetColumnRightAligned,
   productSheetColWidths,
@@ -41,7 +45,7 @@ import {
   applyDraftPricing,
   type ProductSheetColumnDef,
 } from '@/pages/products/productSheetColumnDefs';
-import { PO_LABELS } from '@/pages/purchase-orders/poTerminology';
+import { PO_PASTE_HINT } from '@/pages/purchase-orders/poTerminology';
 import { useBulkUpdateProducts } from '@/hooks/useProducts';
 import {
   COUNTRIES,
@@ -81,9 +85,12 @@ const headerSx = {
   fontWeight: 700,
   fontSize: '0.75rem',
   whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
   py: 0.75,
   px: 1,
   bgcolor: 'background.paper',
+  backgroundImage: 'none',
   borderBottom: '1px solid',
   borderColor: 'divider',
   position: 'sticky',
@@ -91,7 +98,11 @@ const headerSx = {
   zIndex: 2,
 };
 
-const poHeaderSx = { ...headerSx, bgcolor: 'action.selected' };
+const poHeaderSx = {
+  ...headerSx,
+  bgcolor: (t: { palette: { mode: string; grey: Record<number, string> } }) =>
+    (t.palette.mode === 'dark' ? t.palette.grey[800] : t.palette.grey[100]),
+};
 
 const cellSx = {
   py: 0.5,
@@ -99,12 +110,41 @@ const cellSx = {
   fontSize: '0.8125rem',
   borderBottom: '1px solid',
   borderColor: 'divider',
+  overflow: 'hidden',
 };
 
-const extraColBorder = {
-  borderLeft: '2px solid',
-  borderColor: 'divider',
-};
+/** Sticky left: checkbox | # | Name */
+const STICKY_CHECKBOX_LEFT = 0;
+const STICKY_SN_LEFT = SHEET_CHECKBOX_COL_WIDTH;
+const STICKY_NAME_LEFT = SHEET_CHECKBOX_COL_WIDTH + SHEET_SN_COL_WIDTH;
+
+/** Opaque fills only — alpha tokens (action.hover) make sticky cells unreadable. */
+function stickyRowBg(rowDirty: boolean, rowIndex: number, selected: boolean) {
+  return (t: { palette: { mode: string; background: { paper: string }; grey: Record<number, string>; warning: { light: string }; action: { selected: string } } }) => {
+    if (selected) {
+      return t.palette.mode === 'dark' ? t.palette.grey[800] : t.palette.grey[200];
+    }
+    if (rowDirty) {
+      return t.palette.mode === 'dark' ? t.palette.grey[800] : '#fff3e0';
+    }
+    if (rowIndex % 2 === 1) {
+      return t.palette.mode === 'dark' ? t.palette.grey[900] : t.palette.grey[50];
+    }
+    return t.palette.background.paper;
+  };
+}
+
+function stickyErrorBg(t: { palette: { mode: string; error: { dark: string }; grey: Record<number, string> } }) {
+  return t.palette.mode === 'dark' ? t.palette.grey[800] : '#fdecea';
+}
+
+function showBulkEditTips() {
+  showInfo(
+    `Bulk Edit — catalog spreadsheet. `
+    + `PO paste columns: ${PO_PASTE_HINT} — copy selected rows and paste into PO line grid with Ctrl+V.`,
+    { duration: 12000 },
+  );
+}
 
 const nativeInputSx = {
   width: '100%',
@@ -408,6 +448,7 @@ interface SheetRowProps {
   bulkEditMode: boolean;
   selected: boolean;
   rowIndex: number;
+  serialNumber: number;
   options: SelectOptions;
   fieldErrors?: ProductFieldErrors;
   serverError?: string;
@@ -421,6 +462,7 @@ const SheetRow = memo(function SheetRow({
   bulkEditMode,
   selected,
   rowIndex,
+  serialNumber,
   options,
   fieldErrors,
   serverError,
@@ -429,12 +471,7 @@ const SheetRow = memo(function SheetRow({
 }: SheetRowProps) {
   const hasSku = (product.sku ?? '').trim().length > 0;
   const rowDirty = !!draft;
-
-  const rowBg = rowDirty
-    ? 'warning.50'
-    : rowIndex % 2 === 1
-      ? 'action.hover'
-      : undefined;
+  const fill = stickyRowBg(rowDirty, rowIndex, selected);
 
   return (
     <TableRow
@@ -443,10 +480,24 @@ const SheetRow = memo(function SheetRow({
       onClick={() => onToggle(product.id)}
       sx={{
         cursor: bulkEditMode ? 'default' : 'pointer',
-        bgcolor: rowBg,
+        bgcolor: fill,
       }}
     >
-      <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+      <TableCell
+        padding="checkbox"
+        onClick={(e) => e.stopPropagation()}
+        sx={{
+          ...cellSx,
+          position: 'sticky',
+          left: STICKY_CHECKBOX_LEFT,
+          zIndex: 2,
+          bgcolor: fill,
+          backgroundImage: 'none',
+          width: SHEET_CHECKBOX_COL_WIDTH,
+          minWidth: SHEET_CHECKBOX_COL_WIDTH,
+          maxWidth: SHEET_CHECKBOX_COL_WIDTH,
+        }}
+      >
         <Checkbox
           size="small"
           checked={selected}
@@ -454,12 +505,33 @@ const SheetRow = memo(function SheetRow({
           onChange={() => onToggle(product.id)}
         />
       </TableCell>
+      <TableCell
+        align="center"
+        sx={{
+          ...cellSx,
+          position: 'sticky',
+          left: STICKY_SN_LEFT,
+          zIndex: 2,
+          bgcolor: fill,
+          backgroundImage: 'none',
+          width: SHEET_SN_COL_WIDTH,
+          minWidth: SHEET_SN_COL_WIDTH,
+          maxWidth: SHEET_SN_COL_WIDTH,
+          color: 'text.secondary',
+          boxShadow: (t) => `2px 0 0 ${t.palette.divider}`,
+        }}
+      >
+        {serialNumber}
+      </TableCell>
       {PRODUCT_SHEET_COLUMNS.map((col, index) => {
         const fieldKey = col.field && col.field !== 'packQty' && col.field !== 'poUnitCost' && col.field !== 'packCost'
           ? col.field as keyof Product
           : undefined;
         const fieldError = fieldKey ? fieldErrors?.[fieldKey] : undefined;
-        const showServerError = index === 0 && serverError;
+        const showServerError = col.key === 'sku' && serverError;
+        const isName = col.key === 'name';
+        const colWidth = PRODUCT_SHEET_COLUMNS[index].width;
+        const cellFill = fieldError || showServerError ? stickyErrorBg : fill;
 
         return (
           <TableCell
@@ -467,8 +539,21 @@ const SheetRow = memo(function SheetRow({
             align={isSheetColumnRightAligned(index) ? 'right' : 'left'}
             sx={{
               ...cellSx,
-              ...(index === EXTRA_COLUMN_START_INDEX ? extraColBorder : {}),
-              ...(fieldError || showServerError ? { bgcolor: 'error.50' } : {}),
+              width: colWidth,
+              minWidth: colWidth,
+              maxWidth: colWidth,
+              ...(isName
+                ? {
+                    position: 'sticky',
+                    left: STICKY_NAME_LEFT,
+                    zIndex: 2,
+                    bgcolor: cellFill,
+                    backgroundImage: 'none',
+                    boxShadow: (t) => `2px 0 0 ${t.palette.divider}`,
+                  }
+                : {
+                    ...(fieldError || showServerError ? { bgcolor: cellFill } : {}),
+                  }),
               color: !hasSku && col.key === 'sku' ? 'error.main' : undefined,
             }}
             title={fieldError ?? (showServerError || undefined)}
@@ -744,73 +829,74 @@ export function ProductSheetView({
           borderBottom: '1px solid',
           borderColor: 'divider',
           bgcolor: 'action.hover',
+          display: 'flex',
+          gap: 1,
+          flexWrap: 'wrap',
+          alignItems: 'center',
         }}
       >
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-          Sheet view — bulk edit catalog
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          PO paste columns: {PO_LABELS.sku} · {PO_LABELS.packQty} · {PO_LABELS.buyUom} · {PO_LABELS.unitCost} · {PO_LABELS.unitsPerPack} — copy selected rows and paste into PO line grid with Ctrl+V
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          {canBulkEdit && !bulkEditMode && (
+        <Tooltip title="Show tips">
+          <IconButton size="small" onClick={showBulkEditTips} aria-label="Show tips">
+            <InfoOutlinedIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        {canBulkEdit && !bulkEditMode && (
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={bulkEditActivating ? <CircularProgress size={14} color="inherit" /> : <EditIcon />}
+            disabled={bulkEditActivating || loading}
+            onClick={handleEnableBulkEdit}
+          >
+            Bulk edit
+          </Button>
+        )}
+        {canBulkEdit && bulkEditMode && (
+          <>
             <Button
               size="small"
               variant="contained"
-              startIcon={bulkEditActivating ? <CircularProgress size={14} color="inherit" /> : <EditIcon />}
-              disabled={bulkEditActivating || loading}
-              onClick={handleEnableBulkEdit}
+              color="success"
+              startIcon={<SaveIcon />}
+              disabled={!isDirty || bulkMutation.isPending}
+              onClick={() => void handleSave()}
             >
-              Bulk edit
+              Save changes
             </Button>
-          )}
-          {canBulkEdit && bulkEditMode && (
-            <>
-              <Button
-                size="small"
-                variant="contained"
-                color="success"
-                startIcon={<SaveIcon />}
-                disabled={!isDirty || bulkMutation.isPending}
-                onClick={() => void handleSave()}
-              >
-                Save changes
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<CloseIcon />}
-                disabled={bulkMutation.isPending}
-                onClick={handleCancelEdit}
-              >
-                Cancel
-              </Button>
-            </>
-          )}
-          {!bulkEditMode && (
             <Button
               size="small"
               variant="outlined"
-              startIcon={<ContentCopyIcon />}
-              disabled={copying || selectedIds.size === 0}
-              onClick={() => void handleCopySelected()}
+              startIcon={<CloseIcon />}
+              disabled={bulkMutation.isPending}
+              onClick={handleCancelEdit}
             >
-              Copy selected
+              Cancel
             </Button>
-          )}
-          {canCreatePo && !bulkEditMode && (
-            <Button
-              size="small"
-              variant="contained"
-              color="secondary"
-              startIcon={<ReceiptLongIcon />}
-              disabled={selectedWithSku.length === 0}
-              onClick={handleCreatePurchaseOrder}
-            >
-              Create Purchase Order
-            </Button>
-          )}
-        </Box>
+          </>
+        )}
+        {!bulkEditMode && (
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<ContentCopyIcon />}
+            disabled={copying || selectedIds.size === 0}
+            onClick={() => void handleCopySelected()}
+          >
+            Copy selected
+          </Button>
+        )}
+        {canCreatePo && !bulkEditMode && (
+          <Button
+            size="small"
+            variant="contained"
+            color="secondary"
+            startIcon={<ReceiptLongIcon />}
+            disabled={selectedWithSku.length === 0}
+            onClick={handleCreatePurchaseOrder}
+          >
+            Create Purchase Order
+          </Button>
+        )}
       </Box>
 
       {bulkEditMode && (
@@ -852,7 +938,17 @@ export function ProductSheetView({
           </colgroup>
           <TableHead>
             <TableRow>
-              <TableCell padding="checkbox" sx={headerSx}>
+              <TableCell
+                padding="checkbox"
+                sx={{
+                  ...headerSx,
+                  left: STICKY_CHECKBOX_LEFT,
+                  zIndex: 4,
+                  width: SHEET_CHECKBOX_COL_WIDTH,
+                  minWidth: SHEET_CHECKBOX_COL_WIDTH,
+                  maxWidth: SHEET_CHECKBOX_COL_WIDTH,
+                }}
+              >
                 <Checkbox
                   size="small"
                   checked={allPageSelected}
@@ -861,10 +957,36 @@ export function ProductSheetView({
                   onChange={(e) => toggleAll(e.target.checked)}
                 />
               </TableCell>
+              <TableCell
+                align="center"
+                sx={{
+                  ...headerSx,
+                  left: STICKY_SN_LEFT,
+                  zIndex: 4,
+                  width: SHEET_SN_COL_WIDTH,
+                  minWidth: SHEET_SN_COL_WIDTH,
+                  maxWidth: SHEET_SN_COL_WIDTH,
+                  boxShadow: (t) => `2px 0 0 ${t.palette.divider}`,
+                }}
+              >
+                #
+              </TableCell>
               {PRODUCT_SHEET_COLUMNS.map((col, index) => {
+                const isName = col.key === 'name';
+                const colWidth = col.width;
                 const headerStyle = {
                   ...(isPoPasteColumn(index) ? poHeaderSx : headerSx),
-                  ...(index === EXTRA_COLUMN_START_INDEX ? extraColBorder : {}),
+                  width: colWidth,
+                  minWidth: colWidth,
+                  maxWidth: colWidth,
+                  ...(isName
+                    ? {
+                        left: STICKY_NAME_LEFT,
+                        zIndex: 4,
+                        boxShadow: (t: { palette: { divider: string } }) =>
+                          `2px 0 0 ${t.palette.divider}`,
+                      }
+                    : {}),
                 };
                 return (
                   <TableCell
@@ -872,14 +994,28 @@ export function ProductSheetView({
                     align={colAlign(index)}
                     sortDirection={col.sortKey && sortBy === col.sortKey ? sortOrder : false}
                     sx={headerStyle}
+                    title={col.label}
                   >
                     {col.sortKey && onSort && !bulkEditMode ? (
                       <TableSortLabel
                         active={sortBy === col.sortKey}
                         direction={sortBy === col.sortKey ? sortOrder : 'asc'}
                         onClick={() => onSort(col.sortKey!)}
+                        sx={{
+                          maxWidth: '100%',
+                          '& .MuiTableSortLabel-icon': { flexShrink: 0 },
+                        }}
                       >
-                        {col.label}
+                        <Box
+                          component="span"
+                          sx={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {col.label}
+                        </Box>
                       </TableSortLabel>
                     ) : (
                       col.label
@@ -892,13 +1028,13 @@ export function ProductSheetView({
           <TableBody>
             {loading || bulkEditActivating ? (
               <TableRow>
-                <TableCell colSpan={PRODUCT_SHEET_COLUMNS.length + 1} align="center" sx={{ py: 6 }}>
+                <TableCell colSpan={PRODUCT_SHEET_COLUMNS.length + 2} align="center" sx={{ py: 6 }}>
                   <CircularProgress size={32} />
                 </TableCell>
               </TableRow>
             ) : displayProducts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={PRODUCT_SHEET_COLUMNS.length + 1} align="center" sx={{ py: 6 }}>
+                <TableCell colSpan={PRODUCT_SHEET_COLUMNS.length + 2} align="center" sx={{ py: 6 }}>
                   <Typography color="text.secondary">
                     {pageFilteredEmpty ? 'No matching products on this page' : 'No products found'}
                   </Typography>
@@ -913,6 +1049,7 @@ export function ProductSheetView({
                   bulkEditMode={bulkEditMode}
                   selected={selectedIds.has(product.id)}
                   rowIndex={rowIndex}
+                  serialNumber={page * pageSize + rowIndex + 1}
                   options={selectOptions}
                   fieldErrors={validationErrors[product.id]}
                   serverError={serverErrors[product.id]}
