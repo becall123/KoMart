@@ -275,10 +275,12 @@ async def create_product(
             body.sku,
             body.brand,
             body.category,
-            allow_auto=settings.auto_sku,
+            allow_auto=settings.auto_sku or bool((body.category or "").strip()),
         )
     except HTTPException:
         raise
+    except RuntimeError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     if await Product.find_one(Product.sku == sku):
         raise HTTPException(status.HTTP_409_CONFLICT, detail="SKU already exists")
     supplier_name = ""

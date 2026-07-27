@@ -14,7 +14,7 @@ export function useCategories(includeInactive = false) {
 export function useCreateCategory() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { name: string; description?: string }) =>
+    mutationFn: (payload: { name: string; description?: string; code: string }) =>
       categoryService.create(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.categories });

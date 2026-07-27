@@ -85,6 +85,9 @@ async def _run_startup_migrations() -> None:
         {"$set": {"default_payment_method": "bank"}},
     )
     await _seed_default_uoms()
+    # Assign 2-digit category codes + seed SKU sequences for 6-digit CCNNNN SKUs.
+    from app.services.sku import backfill_category_sku_codes
+    await backfill_category_sku_codes()
     # Seed wallet ledger from historical sales/expenses once (idempotent).
     from app.services.wallet_ledger import ensure_backfill
     await ensure_backfill(created_by="system")

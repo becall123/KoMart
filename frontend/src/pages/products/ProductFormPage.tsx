@@ -42,7 +42,7 @@ import { UomConversionHint, UomSectionTitle } from '@/components/uom/UomUi';
 import { formatCurrency } from '@/utils';
 import { computeProductPricing } from '@/utils/productPricing';
 import { defaultPrimaryUom, hasUomConversion, normalizeProductUoms } from '@/utils/uomNormalize';
-import { showApiError, showSuccess } from '@/utils/toast';
+import { showApiError, showSuccess, showWarning } from '@/utils/toast';
 import { productService } from '@/services';
 
 function todayAd(): string {
@@ -52,7 +52,7 @@ function todayAd(): string {
 // ── SKU generator (server-backed) ─────────────────────────────────────────────
 const schema = z.object({
   name:            z.string().min(1, 'Name is required'),
-  sku:             z.string().min(1, 'SKU is required'),
+  sku:             z.string(),
   barcode:         z.string(),
   brand:           z.string(),
   countryOfOrigin: z.string(),
@@ -81,6 +81,13 @@ const schema = z.object({
   nutritionInfo:   z.string(),
   allergenInfo:    z.string(),
 }).superRefine((data, ctx) => {
+  if (!data.sku.trim() && !data.category.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Select a category to auto-generate SKU, or enter a SKU',
+      path: ['sku'],
+    });
+  }
   const converting = hasUomConversion(data.unitsPerBuyUom);
   if (converting && !data.uom.trim()) {
     ctx.addIssue({
@@ -291,29 +298,22 @@ export function ProductFormPage() {
     packOfferedPrice: packOfferedPrice ?? 0,
   });
 
-  useEffect(() => {
-    if (!isEditing && storeSettings?.autoSku && brand && category) {
-      let cancelled = false;
-      void productService.suggestSkus([{ brand, category }]).then(({ skus }) => {
-        if (!cancelled && skus[0]) {
-          setValue('sku', skus[0], { shouldValidate: true });
-        }
-      });
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [isEditing, storeSettings?.autoSku, brand, category, setValue]);
-
   // ── Auto SKU ──────────────────────────────────────────────────────────────
   const handleGenerateSku = useCallback(() => {
-    const brand = watch('brand');
-    const category = watch('category');
+    const brandVal = watch('brand');
+    const categoryVal = watch('category');
     const currentSku = watch('sku');
+    if (!categoryVal?.trim()) {
+      showWarning('Select a category to generate SKU.');
+      return;
+    }
     void productService
-      .suggestSkus([{ brand, category }], currentSku ? [currentSku] : [])
+      .suggestSkus([{ brand: brandVal || '', category: categoryVal }], currentSku ? [currentSku] : [])
       .then(({ skus }) => {
         if (skus[0]) setValue('sku', skus[0], { shouldValidate: true });
+      })
+      .catch((err) => {
+        showApiError(err, 'Could not generate SKU.');
       });
   }, [watch, setValue]);
 
@@ -442,14 +442,24 @@ export function ProductFormPage() {
                   label="SKU"
                   fullWidth
                   error={!!errors.sku}
-                  helperText={errors.sku?.message}
+                  helperText={
+                    errors.sku?.message
+                    || 'Format: 6 digits (category code + product number), assigned by server. Select a category first.'
+                  }
                   slotProps={{
                     input: {
                       endAdornment: (
-                        <Tooltip title="Auto-generate SKU from brand & category">
-                          <IconButton size="small" onClick={handleGenerateSku} tabIndex={-1}>
-                            <AutorenewIcon fontSize="small" />
-                          </IconButton>
+                        <Tooltip title={category ? 'Generate SKU from category' : 'Select a category to generate SKU'}>
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={handleGenerateSku}
+                              tabIndex={-1}
+                              disabled={!category}
+                            >
+                              <AutorenewIcon fontSize="small" />
+                            </IconButton>
+                          </span>
                         </Tooltip>
                       ),
                     },

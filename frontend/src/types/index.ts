@@ -6,6 +6,8 @@ export interface Category {
   id: string;
   name: string;
   description: string;
+  /** Two-digit SKU prefix (01–99). */
+  code: string;
   isActive: boolean;
   createdAt: string;
 }

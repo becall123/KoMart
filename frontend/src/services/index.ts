@@ -690,7 +690,7 @@ export const categoryService = {
     });
     return data as Category[];
   },
-  create: async (payload: { name: string; description?: string }): Promise<Category> => {
+  create: async (payload: { name: string; description?: string; code: string }): Promise<Category> => {
     const { data } = await apiClient.post('/categories', payload);
     return data as Category;
   },

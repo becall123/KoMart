@@ -303,7 +303,7 @@ export function StoreInfoTab() {
           <Grid size={12}>
             <FormControlLabel
               control={<Switch checked={form.autoSku} onChange={change('autoSku')} disabled={!canEdit} />}
-              label="Auto-generate SKU when brand and category are set (new products)"
+              label="Auto-generate SKU when category is set (new products)"
             />
           </Grid>
 

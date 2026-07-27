@@ -172,9 +172,16 @@ export function BulkProductFormPage() {
   const generateSkus = async () => {
     const targets = rows
       .map((row, index) => ({ row, index }))
-      .filter(({ row }) => !row.sku.trim() && row.name.trim());
+      .filter(({ row }) => !row.sku.trim() && row.name.trim() && row.category.trim());
     if (!targets.length) {
-      setError('Add product names first. SKUs are only generated for named rows without a SKU.');
+      const namedWithoutCategory = rows.some(
+        (row) => !row.sku.trim() && row.name.trim() && !row.category.trim(),
+      );
+      setError(
+        namedWithoutCategory
+          ? 'Set Category on rows before generating SKUs.'
+          : 'Add product names first. SKUs are only generated for named rows without a SKU.',
+      );
       return;
     }
 
@@ -230,6 +237,17 @@ export function BulkProductFormPage() {
     );
     if (invalid) {
       setError(`Complete product name, prices, and units/pack on row ${rows.indexOf(invalid) + 1}.`);
+      return;
+    }
+
+    const needsCategoryForSku = populatedRows.find(
+      (row) => !row.sku.trim() && !row.category.trim(),
+    );
+    if (needsCategoryForSku) {
+      setError(
+        `Row ${rows.indexOf(needsCategoryForSku) + 1}: set Category before saving without a SKU `
+        + '(server assigns a 6-digit SKU from the category code).',
+      );
       return;
     }
 

@@ -31,6 +31,10 @@ import { getErrorMessage } from '@/services/apiClient';
 import { showSuccess } from '@/utils/toast';
 import type { Category } from '@/types';
 
+function normalizeCodeInput(raw: string): string {
+  return raw.replace(/\D/g, '').slice(0, 2);
+}
+
 export function CategoriesTab() {
   const { data: categories = [], isLoading, isError, error: loadError } = useCategories(true);
   const createMutation = useCreateCategory();
@@ -40,6 +44,7 @@ export function CategoriesTab() {
   const [editTarget, setEditTarget] = useState<Category | null>(null);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newCode, setNewCode] = useState('');
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [error, setError] = useState('');
@@ -53,13 +58,23 @@ export function CategoriesTab() {
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
+    const code = newCode.padStart(2, '0');
+    if (!/^\d{2}$/.test(code)) {
+      setError('Category code must be exactly 2 digits (01–99).');
+      return;
+    }
     setError('');
     try {
-      await createMutation.mutateAsync({ name: newName.trim(), description: newDesc.trim() });
+      await createMutation.mutateAsync({
+        name: newName.trim(),
+        description: newDesc.trim(),
+        code,
+      });
       showSuccess('Category created.');
       setAddOpen(false);
       setNewName('');
       setNewDesc('');
+      setNewCode('');
     } catch (err) {
       setError(getErrorMessage(err));
     }
@@ -101,11 +116,21 @@ export function CategoriesTab() {
         <Button
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={() => { setAddOpen(true); setNewName(''); setNewDesc(''); setError(''); }}
+          onClick={() => {
+            setAddOpen(true);
+            setNewName('');
+            setNewDesc('');
+            setNewCode('');
+            setError('');
+          }}
         >
           Add Category
         </Button>
       </Box>
+
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Each category needs a unique 2-digit code. Product SKUs are 6 digits: category code + 4-digit product number (e.g. 050001).
+      </Typography>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {isError && (
@@ -121,6 +146,7 @@ export function CategoriesTab() {
           <Table>
             <TableHead>
               <TableRow>
+                <TableCell width={80}>Code</TableCell>
                 <TableCell>Name</TableCell>
                 <TableCell>Description</TableCell>
                 <TableCell>Status</TableCell>
@@ -130,7 +156,7 @@ export function CategoriesTab() {
             <TableBody>
               {categories.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} align="center">
+                  <TableCell colSpan={5} align="center">
                     <Typography color="text.secondary" sx={{ py: 2 }}>
                       No categories yet. Add one to use in product forms and filters.
                     </Typography>
@@ -139,6 +165,11 @@ export function CategoriesTab() {
               ) : (
               categories.map((cat) => (
                 <TableRow key={cat.id} sx={{ opacity: cat.isActive ? 1 : 0.5 }}>
+                  <TableCell>
+                    <Typography variant="body2" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                      {cat.code || '—'}
+                    </Typography>
+                  </TableCell>
                   <TableCell>
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>{cat.name}</Typography>
                   </TableCell>
@@ -180,7 +211,6 @@ export function CategoriesTab() {
         </TableContainer>
       )}
 
-      {/* Add Category Dialog */}
       <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Add Category</DialogTitle>
         <DialogContent>
@@ -192,6 +222,15 @@ export function CategoriesTab() {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               autoFocus
+            />
+            <TextField
+              label="SKU code"
+              fullWidth
+              value={newCode}
+              onChange={(e) => setNewCode(normalizeCodeInput(e.target.value))}
+              placeholder="01"
+              helperText="Used as first 2 digits of product SKU (01–99). Cannot change after create."
+              inputProps={{ inputMode: 'numeric', maxLength: 2 }}
             />
             <TextField
               label="Description (optional)"
@@ -209,19 +248,25 @@ export function CategoriesTab() {
             variant="contained"
             loading={createMutation.isPending}
             onClick={handleCreate}
-            disabled={!newName.trim()}
+            disabled={!newName.trim() || newCode.length < 1}
           >
             Add Category
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Edit Category Dialog */}
       <Dialog open={!!editTarget} onClose={() => setEditTarget(null)} maxWidth="sm" fullWidth>
         <DialogTitle>Edit Category — {editTarget?.name}</DialogTitle>
         <DialogContent>
           {error && <Alert severity="error" sx={{ mb: 2, mt: 1 }}>{error}</Alert>}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="SKU code"
+              fullWidth
+              value={editTarget?.code || ''}
+              disabled
+              helperText="Code is fixed after create (first 2 digits of product SKUs)."
+            />
             <TextField
               label="Category Name"
               fullWidth

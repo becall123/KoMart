@@ -365,9 +365,14 @@ async def init():
     # Categories
     existing_cats = await Category.find().count()
     if existing_cats == 0:
-        for cat_name in INITIAL_CATEGORIES:
+        for idx, cat_name in enumerate(INITIAL_CATEGORIES, start=1):
             desc = DESC_TEMPLATES.get(cat_name, "")
-            await Category(name=cat_name, description=desc).insert()
+            await Category(
+                name=cat_name,
+                description=desc,
+                code=f"{idx:02d}",
+                next_sku_seq=1,
+            ).insert()
         print(f"  Created {len(INITIAL_CATEGORIES)} categories.")
     else:
         print(f"  Skipped categories — {existing_cats} category(ies) already exist.")
@@ -583,9 +588,14 @@ async def seed():
     print("Created store settings.")
 
     # ── Categories ────────────────────────────────────────────────────────
-    for cat_name in INITIAL_CATEGORIES:
+    for idx, cat_name in enumerate(INITIAL_CATEGORIES, start=1):
         desc = DESC_TEMPLATES.get(cat_name, "")
-        await Category(name=cat_name, description=desc).insert()
+        await Category(
+            name=cat_name,
+            description=desc,
+            code=f"{idx:02d}",
+            next_sku_seq=1,
+        ).insert()
     print(f"Created {len(INITIAL_CATEGORIES)} categories.")
 
     # ── Expenses ──────────────────────────────────────────────────────────
