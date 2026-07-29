@@ -186,7 +186,8 @@ frontend/
 │   ├── assets/             # Images, fonts, icons
 │   ├── components/
 │   │   ├── common/         # StatCard, SearchBar, ConfirmDialog, FormModal,
-│   │   │                   # DateRangePicker, NotificationPanel, PageHeader
+│   │   │                   # DateRangePicker, NotificationPanel, PageHeader,
+│   │   │                   # NepaliAwareDatePicker
 │   │   ├── charts/         # ChartCard and chart wrappers
 │   │   ├── dashboard/      # Dashboard-specific widgets
 │   │   ├── forms/          # Reusable form field components
@@ -342,6 +343,7 @@ API is available at:
 | GET/POST | `/api/v1/customers` | List / Create customers |
 | GET | `/api/v1/customers/{id}/transactions` | Customer purchase history |
 | POST | `/api/v1/transactions` | Create POS transaction |
+| POST | `/api/v1/purchase-orders/{id}/payments` | Record PO payment (creates linked expense) |
 | GET | `/api/v1/dashboard/stats` | Dashboard summary |
 | GET | `/api/v1/dashboard/revenue` | Revenue trend data |
 | GET | `/api/v1/dashboard/top-products` | Top selling products |
@@ -388,7 +390,7 @@ All service functions in `src/services/index.ts` automatically switch between th
 | Product Management | Scaffolded |
 | Inventory Management | Scaffolded |
 | Supplier Management | Scaffolded |
-| Purchase Orders | Scaffolded |
+| Purchase Orders | Done |
 | Customer Management | Scaffolded |
 | Reports | Scaffolded |
 | Notifications Center | Scaffolded |

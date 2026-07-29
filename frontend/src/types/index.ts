@@ -368,6 +368,7 @@ export interface PurchaseOrderPayment {
   amount: number;
   date: string;
   paymentMethod: string;
+  billNo?: string;
   notes?: string;
   expenseId?: string;
   createdBy?: string;
@@ -378,6 +379,7 @@ export interface PurchaseOrderPaymentPayload {
   amount: number;
   date: string;
   paymentMethod: string;
+  billNo?: string;
   notes?: string;
 }
 

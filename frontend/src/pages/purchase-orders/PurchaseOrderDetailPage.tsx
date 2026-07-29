@@ -15,6 +15,7 @@ import {
   CircularProgress,
   Alert,
   MenuItem,
+  Select,
   TextField,
   Checkbox,
   Link,
@@ -22,10 +23,9 @@ import {
   AccordionSummary,
   AccordionDetails,
   Grid,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  InputAdornment,
+  InputLabel,
+  FormControl,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
@@ -33,8 +33,12 @@ import InventoryIcon from '@mui/icons-material/Inventory';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { PageHeader } from '@/components/common/PageHeader';
 import { NepaliAwareDatePicker } from '@/components/common/NepaliAwareDatePicker';
+import { FormModal } from '@/components/common/FormModal';
 import {
   usePurchaseOrder,
   useUpdatePurchaseOrderStatus,
@@ -42,6 +46,7 @@ import {
   useRecordPurchaseOrderPayment,
 } from '@/hooks/usePurchaseOrders';
 import { formatCurrency, canManagePurchaseOrders } from '@/utils';
+import { CURRENCY_SYMBOL } from '@/constants';
 import { useFormatDate } from '@/hooks/useFormatDate';
 import { canEditPurchaseOrder } from '@/utils/canEditPurchaseOrder';
 import { getErrorMessage } from '@/services/apiClient';
@@ -60,6 +65,16 @@ import {
   poDetailTableMinWidth,
 } from '@/pages/purchase-orders/poLineTableColumns';
 import { PO_LABELS, PO_RECEIVE_HINT } from '@/pages/purchase-orders/poTerminology';
+
+const PAYMENT_SCHEMA = z.object({
+  amount: z.number({ error: 'Amount is required' }).positive('Amount must be positive'),
+  date: z.string().min(1, 'Payment date is required'),
+  paymentMethod: z.string().min(1, 'Payment method is required'),
+  billNo: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+type PaymentFormValues = z.infer<typeof PAYMENT_SCHEMA>;
 
 const STATUS_COLORS: Record<PurchaseOrderStatus, 'default' | 'warning' | 'info' | 'success' | 'error'> = {
   draft: 'default', ordered: 'warning', partial: 'info', received: 'success', cancelled: 'error',
@@ -105,11 +120,24 @@ export function PurchaseOrderDetailPage() {
   const [receiveError, setReceiveError] = useState('');
   const [receiveSelections, setReceiveSelections] = useState<Record<string, ReceiveSelection>>({});
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [paymentNotes, setPaymentNotes] = useState('');
   const [paymentError, setPaymentError] = useState('');
+
+  const {
+    register,
+    handleSubmit: handlePaymentSubmit,
+    control: paymentControl,
+    reset: resetPaymentForm,
+    formState: { errors: paymentErrors },
+  } = useForm<PaymentFormValues>({
+    resolver: zodResolver(PAYMENT_SCHEMA),
+    defaultValues: {
+      amount: undefined,
+      date: new Date().toISOString().slice(0, 10),
+      paymentMethod: 'cash',
+      billNo: '',
+      notes: '',
+    },
+  });
 
   const { data: po, isLoading, isError } = usePurchaseOrder(id ?? '');
   const statusMutation = useUpdatePurchaseOrderStatus();
@@ -214,17 +242,20 @@ export function PurchaseOrderDetailPage() {
 
   const openPaymentDialog = () => {
     if (!po) return;
-    setPaymentAmount(String(remaining));
-    setPaymentDate(new Date().toISOString().slice(0, 10));
-    setPaymentMethod('cash');
-    setPaymentNotes('');
+    resetPaymentForm({
+      amount: remaining,
+      date: new Date().toISOString().slice(0, 10),
+      paymentMethod: 'cash',
+      billNo: '',
+      notes: '',
+    });
     setPaymentError('');
     setPaymentOpen(true);
   };
 
-  const handleRecordPayment = async () => {
+  const handleRecordPayment = async (values: PaymentFormValues) => {
     if (!po) return;
-    const amount = parseFloat(paymentAmount);
+    const amount = values.amount;
     if (!Number.isFinite(amount) || amount <= 0) {
       setPaymentError('Enter a valid payment amount.');
       return;
@@ -233,7 +264,7 @@ export function PurchaseOrderDetailPage() {
       setPaymentError(`Amount cannot exceed remaining balance (${remaining.toFixed(2)}).`);
       return;
     }
-    if (!paymentDate) {
+    if (!values.date) {
       setPaymentError('Payment date is required.');
       return;
     }
@@ -243,9 +274,10 @@ export function PurchaseOrderDetailPage() {
         id: po.id,
         data: {
           amount,
-          date: paymentDate,
-          paymentMethod,
-          notes: paymentNotes.trim() || undefined,
+          date: values.date,
+          paymentMethod: values.paymentMethod,
+          billNo: values.billNo?.trim() || undefined,
+          notes: values.notes?.trim() || undefined,
         },
       });
       showSuccess('Payment recorded and expense created.');
@@ -658,62 +690,100 @@ export function PurchaseOrderDetailPage() {
         </Box>
       </Paper>
 
-      <Dialog open={paymentOpen} onClose={() => setPaymentOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Record Payment</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-          {paymentError && <Alert severity="error">{paymentError}</Alert>}
-          <Typography variant="body2" color="text.secondary">
-            Remaining balance: {formatCurrency(remaining)}. This creates a linked expense under Purchase Order.
-          </Typography>
-          <TextField
-            label="Amount"
-            type="number"
-            size="small"
-            value={paymentAmount}
-            onChange={(e) => setPaymentAmount(e.target.value)}
-            slotProps={{ htmlInput: { min: 0.01, step: 0.01, max: remaining } }}
-            fullWidth
-          />
-          <NepaliAwareDatePicker
-            label="Payment date"
-            value={paymentDate}
-            onChange={setPaymentDate}
-            size="small"
-            fullWidth
-          />
-          <TextField
-            select
-            label="Payment method"
-            size="small"
-            value={paymentMethod}
-            onChange={(e) => setPaymentMethod(e.target.value)}
-            fullWidth
-          >
-            {PAYMENT_METHODS.map((method) => (
-              <MenuItem key={method.value} value={method.value}>{method.label}</MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            label="Notes"
-            size="small"
-            value={paymentNotes}
-            onChange={(e) => setPaymentNotes(e.target.value)}
-            multiline
-            minRows={2}
-            fullWidth
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPaymentOpen(false)} disabled={paymentMutation.isPending}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={() => void handleRecordPayment()}
-            loading={paymentMutation.isPending}
-          >
-            Save payment
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <FormModal
+        open={paymentOpen}
+        title="Record Payment"
+        onClose={() => setPaymentOpen(false)}
+        onSubmit={handlePaymentSubmit(handleRecordPayment)}
+        submitLabel="Save payment"
+        loading={paymentMutation.isPending}
+        maxWidth="sm"
+      >
+        {paymentError && <Alert severity="error" sx={{ mb: 2 }}>{paymentError}</Alert>}
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Remaining balance: {formatCurrency(remaining)}. This creates a linked expense under Purchase Order.
+        </Typography>
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              label="Amount"
+              type="number"
+              size="small"
+              fullWidth
+              required
+              {...register('amount', { valueAsNumber: true })}
+              error={!!paymentErrors.amount}
+              helperText={paymentErrors.amount?.message}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">{CURRENCY_SYMBOL}</InputAdornment>
+                  ),
+                },
+              }}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <Controller
+              name="date"
+              control={paymentControl}
+              render={({ field }) => (
+                <NepaliAwareDatePicker
+                  label="Payment date"
+                  value={field.value}
+                  onChange={field.onChange}
+                  size="small"
+                  fullWidth
+                />
+              )}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <Controller
+              name="paymentMethod"
+              control={paymentControl}
+              render={({ field }) => (
+                <FormControl fullWidth required error={!!paymentErrors.paymentMethod}>
+                  <InputLabel>Payment method</InputLabel>
+                  <Select label="Payment method" {...field}>
+                    {PAYMENT_METHODS.map((method) => (
+                      <MenuItem key={method.value} value={method.value}>{method.label}</MenuItem>
+                    ))}
+                  </Select>
+                  {paymentErrors.paymentMethod && (
+                    <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.75 }}>
+                      {paymentErrors.paymentMethod.message}
+                    </Typography>
+                  )}
+                </FormControl>
+              )}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              label="Bill no."
+              size="small"
+              fullWidth
+              placeholder="Optional vendor bill / invoice number"
+              {...register('billNo')}
+              error={!!paymentErrors.billNo}
+              helperText={paymentErrors.billNo?.message}
+            />
+          </Grid>
+          <Grid size={{ xs: 12 }}>
+            <TextField
+              label="Notes"
+              size="small"
+              fullWidth
+              multiline
+              minRows={2}
+              {...register('notes')}
+              error={!!paymentErrors.notes}
+              helperText={paymentErrors.notes?.message}
+            />
+          </Grid>
+        </Grid>
+      </FormModal>
     </Box>
   );
 }
