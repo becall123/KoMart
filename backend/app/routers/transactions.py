@@ -3,14 +3,30 @@ from math import ceil
 from datetime import datetime, timezone
 from typing import Optional
 
-from app.auth.dependencies import get_current_user, require_manager_or_above
+from app.auth.dependencies import get_current_user, require_manager_or_above, require_admin_only
 from app.models.user import User, UserRole
 from app.models.transaction import Transaction, PaymentMethod
-from app.schemas.transaction import TransactionCreate, TransactionResponse, TransactionUpdate, TransactionVoidRequest
+from app.schemas.transaction import (
+    TransactionCreate,
+    TransactionResponse,
+    TransactionUpdate,
+    TransactionVoidRequest,
+    BackfillSalesRequest,
+    BackfillSalesResponse,
+    BackfillValidateRequest,
+    BackfillValidateResponse,
+    BackfillVarianceRequest,
+    BackfillVarianceResponse,
+)
 from app.schemas.common import PaginatedResponse
 from app.models.audit_log import AuditModule
 from app.services.audit import log_audit, sale_snapshot
 from app.services.sales import record_sale, update_transaction, void_sale, _to_response
+from app.services.sales_backfill import (
+    backfill_sales_from_rows,
+    post_backfill_variance,
+    validate_backfill_sales,
+)
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -62,6 +78,89 @@ async def list_transactions(
         page_size=page_size,
         total_pages=ceil(total / page_size) if total else 1,
     )
+
+
+@router.post("/backfill/validate", response_model=BackfillValidateResponse)
+async def validate_backfill_transactions(
+    body: BackfillValidateRequest,
+    _: User = Depends(require_admin_only),
+):
+    return await validate_backfill_sales(body.lines)
+
+
+@router.post("/backfill/variance", response_model=BackfillVarianceResponse)
+async def post_backfill_variance_adjustment(
+    body: BackfillVarianceRequest,
+    request: Request,
+    current_user: User = Depends(require_admin_only),
+):
+    result = await post_backfill_variance(body, created_by=current_user.name)
+    await log_audit(
+        module=AuditModule.sales,
+        action="backfill_variance",
+        user=current_user,
+        request=request,
+        entity_type="sales_backfill",
+        entity_id=result.id,
+        new={
+            "wallet": result.wallet,
+            "amount": result.amount,
+            "direction": result.direction,
+            "date": result.date,
+            "remarks": result.remarks,
+            "expected_total": result.expected_total,
+            "actual_total": result.actual_total,
+            "difference": result.difference,
+        },
+    )
+    return result
+
+
+@router.post("/backfill", response_model=BackfillSalesResponse)
+async def backfill_transactions(
+    body: BackfillSalesRequest,
+    request: Request,
+    current_user: User = Depends(require_admin_only),
+):
+    result = await backfill_sales_from_rows(
+        body.lines,
+        created_by=current_user.name,
+        cashier_id=str(current_user.id),
+    )
+    expected = round(float(body.expected_total), 2)
+    actual = round(float(body.actual_total), 2)
+    difference = round(expected - actual, 2)
+    result.expected_total = expected
+    result.actual_total = actual
+    result.difference = difference
+
+    for created in result.created:
+        await log_audit(
+            module=AuditModule.sales,
+            action="backfill",
+            user=current_user,
+            request=request,
+            entity_type="transaction",
+            entity_id=created.id,
+            new=sale_snapshot(created),
+        )
+    await log_audit(
+        module=AuditModule.sales,
+        action="backfill_reconcile",
+        user=current_user,
+        request=request,
+        entity_type="sales_backfill",
+        entity_id="",
+        new={
+            "expected_total": expected,
+            "actual_total": actual,
+            "difference": difference,
+            "created_count": result.created_count,
+            "error_count": result.error_count,
+            "created_bill_nos": [c.transaction_number for c in result.created],
+        },
+    )
+    return result
 
 
 @router.get("/{txn_id}", response_model=TransactionResponse)

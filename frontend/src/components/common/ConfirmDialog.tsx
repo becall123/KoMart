@@ -34,7 +34,7 @@ export function ConfirmDialog({
     <Dialog open={open} onClose={onCancel} maxWidth="xs" fullWidth>
       <DialogTitle>{title}</DialogTitle>
       <DialogContent>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-line' }}>
           {message}
         </Typography>
       </DialogContent>

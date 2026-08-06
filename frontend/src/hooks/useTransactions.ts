@@ -1,7 +1,13 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/constants';
 import { transactionService } from '@/services';
-import type { ListQueryParams, PaymentMethod } from '@/types';
+import type {
+  BackfillSaleLinePayload,
+  BackfillSalesRequestPayload,
+  BackfillVariancePayload,
+  ListQueryParams,
+  PaymentMethod,
+} from '@/types';
 import { invalidateCommerceQueries } from '@/hooks/invalidateCommerce';
 
 export function useTransactions(params?: ListQueryParams) {
@@ -17,6 +23,33 @@ export function useTransaction(id: string) {
     queryKey: QUERY_KEYS.transaction(id),
     queryFn: () => transactionService.getById(id),
     enabled: !!id,
+  });
+}
+
+export function useBackfillSales() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: BackfillSalesRequestPayload) => transactionService.backfill(payload),
+    onSuccess: () => {
+      invalidateCommerceQueries(queryClient, { scopes: ['sale', 'stock'] });
+    },
+  });
+}
+
+export function useValidateBackfillSales() {
+  return useMutation({
+    mutationFn: (lines: BackfillSaleLinePayload[]) => transactionService.validateBackfill(lines),
+  });
+}
+
+export function usePostBackfillVariance() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: BackfillVariancePayload) => transactionService.postBackfillVariance(payload),
+    onSuccess: () => {
+      invalidateCommerceQueries(queryClient, { scopes: ['sale'] });
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.wallets });
+    },
   });
 }
 

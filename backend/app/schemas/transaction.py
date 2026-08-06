@@ -64,3 +64,70 @@ class TransactionVoidRequest(BaseModel):
 
 class TransactionItemResponse(TransactionItem):
     pass
+
+
+class BackfillSaleLine(BaseModel):
+    row: int = Field(ge=1)
+    transaction_no: str
+    sale_date: str
+    sku: Optional[str] = None
+    barcode: Optional[str] = None
+    quantity: int = Field(ge=1)
+    unit_price: Optional[float] = Field(default=None, ge=0)
+    discount_amount: Optional[float] = Field(default=None, ge=0)
+    payment_method: str
+    customer_phone: Optional[str] = None
+    customer_name: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class BackfillSalesRequest(BaseModel):
+    lines: list[BackfillSaleLine] = Field(min_length=1)
+    expected_total: float = Field(ge=0)
+    actual_total: float = Field(ge=0)
+
+
+class BackfillSaleError(BaseModel):
+    transaction_no: str
+    rows: list[int] = Field(default_factory=list)
+    detail: str
+
+
+class BackfillSalesResponse(BaseModel):
+    created: list[TransactionResponse] = Field(default_factory=list)
+    errors: list[BackfillSaleError] = Field(default_factory=list)
+    created_count: int = 0
+    error_count: int = 0
+    expected_total: float = 0.0
+    actual_total: float = 0.0
+    difference: float = 0.0
+
+
+class BackfillValidateRequest(BaseModel):
+    lines: list[BackfillSaleLine] = Field(min_length=1)
+
+
+class BackfillValidateResponse(BaseModel):
+    ok: bool = False
+    errors: list[BackfillSaleError] = Field(default_factory=list)
+    error_count: int = 0
+
+
+class BackfillVarianceRequest(BaseModel):
+    expected_total: float
+    actual_total: float
+    difference: float
+    date: Optional[str] = None
+    wallet: str = "cash"
+
+
+class BackfillVarianceResponse(BaseModel):
+    id: str
+    wallet: str
+    amount: float
+    direction: str
+    date: str
+    remarks: str
+    expected_total: float
+    actual_total: float
+    difference: float

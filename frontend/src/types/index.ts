@@ -488,6 +488,69 @@ export interface Transaction {
   createdBy: string;
 }
 
+export interface BackfillSaleLinePayload {
+  row: number;
+  transactionNo: string;
+  saleDate: string;
+  sku?: string;
+  barcode?: string;
+  quantity: number;
+  unitPrice?: number;
+  discountAmount?: number;
+  paymentMethod: string;
+  customerPhone?: string;
+  customerName?: string;
+  notes?: string;
+}
+
+export interface BackfillSaleError {
+  transactionNo: string;
+  rows: number[];
+  detail: string;
+}
+
+export interface BackfillSalesResponse {
+  created: Transaction[];
+  errors: BackfillSaleError[];
+  createdCount: number;
+  errorCount: number;
+  expectedTotal?: number;
+  actualTotal?: number;
+  difference?: number;
+}
+
+export interface BackfillSalesRequestPayload {
+  lines: BackfillSaleLinePayload[];
+  expectedTotal: number;
+  actualTotal: number;
+}
+
+export interface BackfillValidateResponse {
+  ok: boolean;
+  errors: BackfillSaleError[];
+  errorCount: number;
+}
+
+export interface BackfillVariancePayload {
+  expectedTotal: number;
+  actualTotal: number;
+  difference: number;
+  date?: string;
+  wallet?: string;
+}
+
+export interface BackfillVarianceResponse {
+  id: string;
+  wallet: string;
+  amount: number;
+  direction: string;
+  date: string;
+  remarks: string;
+  expectedTotal: number;
+  actualTotal: number;
+  difference: number;
+}
+
 export type NotificationType =
   | 'low_stock'
   | 'expiry'

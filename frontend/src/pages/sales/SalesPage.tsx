@@ -1,20 +1,23 @@
 import { useState } from 'react';
-import { Box, MenuItem, TextField, Typography } from '@mui/material';
+import { Box, Button, MenuItem, TextField, Typography } from '@mui/material';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/common/PageHeader';
 import { SearchBar } from '@/components/common/SearchBar';
 import { DateRangePicker } from '@/components/common/DateRangePicker';
 import { DataTable, type Column } from '@/components/tables/DataTable';
 import { useTransactions } from '@/hooks/useTransactions';
-import { formatCurrency } from '@/utils';
+import { formatCurrency, isAdmin } from '@/utils';
 import { useFormatDate } from '@/hooks/useFormatDate';
 import { PAYMENT_METHODS } from '@/constants';
+import { useAuthStore } from '@/store';
 import type { PaymentMethod, Transaction } from '@/types';
 import dayjs from 'dayjs';
 
 export function SalesPage() {
   const navigate = useNavigate();
   const formatDate = useFormatDate();
+  const user = useAuthStore((s) => s.user);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(25);
@@ -74,6 +77,17 @@ export function SalesPage() {
       <PageHeader
         title="Sales"
         subtitle={`${data?.total ?? 0} transactions`}
+        action={
+          isAdmin(user?.role) ? (
+            <Button
+              variant="outlined"
+              startIcon={<UploadFileIcon />}
+              onClick={() => navigate('/sales/backfill')}
+            >
+              Backfill Sales
+            </Button>
+          ) : undefined
+        }
       />
 
       <Box sx={{ mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>

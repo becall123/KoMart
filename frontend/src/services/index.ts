@@ -25,6 +25,12 @@ import type {
   PurchaseOrderWritePayload,
   Customer,
   Transaction,
+  BackfillSaleLinePayload,
+  BackfillSalesRequestPayload,
+  BackfillSalesResponse,
+  BackfillValidateResponse,
+  BackfillVariancePayload,
+  BackfillVarianceResponse,
   PaymentMethod,
   AppNotification,
   NotificationType,
@@ -502,6 +508,18 @@ export const transactionService = {
   void: async (id: string, reason: string): Promise<Transaction> => {
     const { data } = await apiClient.post(`/transactions/${id}/void`, { reason });
     return data as Transaction;
+  },
+  backfill: async (payload: BackfillSalesRequestPayload): Promise<BackfillSalesResponse> => {
+    const { data } = await apiClient.post('/transactions/backfill', payload);
+    return data as BackfillSalesResponse;
+  },
+  validateBackfill: async (lines: BackfillSaleLinePayload[]): Promise<BackfillValidateResponse> => {
+    const { data } = await apiClient.post('/transactions/backfill/validate', { lines });
+    return data as BackfillValidateResponse;
+  },
+  postBackfillVariance: async (payload: BackfillVariancePayload): Promise<BackfillVarianceResponse> => {
+    const { data } = await apiClient.post('/transactions/backfill/variance', payload);
+    return data as BackfillVarianceResponse;
   },
 };
 

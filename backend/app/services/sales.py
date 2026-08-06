@@ -232,8 +232,33 @@ def _to_response(txn: Transaction) -> TransactionResponse:
     )
 
 
-async def record_sale(body: TransactionCreate, cashier_id: str | None = None) -> TransactionResponse:
-    body = await prepare_sale_body(body)
+async def record_sale(
+    body: TransactionCreate,
+    cashier_id: str | None = None,
+    *,
+    apply_loyalty: bool = True,
+    skip_server_pricing: bool = False,
+) -> TransactionResponse:
+    if not skip_server_pricing:
+        body = await prepare_sale_body(body)
+    else:
+        # Backfill: keep Excel/catalog prices already on the body; zero promos/loyalty.
+        subtotal = round(sum(i.price * i.quantity for i in body.items), 2)
+        manual = max(0.0, min(float(body.manual_discount or 0), subtotal))
+        body = body.model_copy(
+            update={
+                "subtotal": subtotal,
+                "promotion_discount": 0.0,
+                "manual_discount": manual,
+                "loyalty_points_redeemed": 0,
+                "discount": manual,
+                "applied_promotions": [],
+                "coupon_code": "",
+                "tax": 0.0,
+                "round_off": 0.0,
+                "total": round(max(0.0, subtotal - manual), 2),
+            }
+        )
     product_map = await _load_products_map([i.product_id for i in body.items])
 
     for item in body.items:
@@ -349,7 +374,7 @@ async def record_sale(body: TransactionCreate, cashier_id: str | None = None) ->
                     "reference_id": txn_id,
                 })
 
-        if body.customer_id:
+        if apply_loyalty and body.customer_id:
             customer = await Customer.get(body.customer_id)
             if customer:
                 points_earned = int(body.total / 100)

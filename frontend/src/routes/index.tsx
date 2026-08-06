@@ -19,6 +19,7 @@ import { PurchaseOrderFormPage } from '@/pages/purchase-orders/PurchaseOrderForm
 import { PurchaseOrderDetailPage } from '@/pages/purchase-orders/PurchaseOrderDetailPage';
 import { SalesPage } from '@/pages/sales/SalesPage';
 import { SaleDetailPage } from '@/pages/sales/SaleDetailPage';
+import { SalesBackfillPage } from '@/pages/sales/SalesBackfillPage';
 import { SuppliersPage } from '@/pages/suppliers/SuppliersPage';
 import { SupplierFormPage } from '@/pages/suppliers/SupplierFormPage';
 import { SupplierDetailPage } from '@/pages/suppliers/SupplierDetailPage';
@@ -62,6 +63,12 @@ export const router = createBrowserRouter([
           { path: '/dashboard', element: <DashboardPage /> },
           { path: '/pos', element: <POSPage /> },
           { path: '/sales', element: <SalesPage /> },
+          {
+            element: <RoleGuard allow={['admin']} />,
+            children: [
+              { path: '/sales/backfill', element: <SalesBackfillPage /> },
+            ],
+          },
           { path: '/sales/:id', element: <SaleDetailPage /> },
           { path: '/products', element: <ProductsPage /> },
           { path: '/customers', element: <CustomersPage /> },
