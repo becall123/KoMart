@@ -164,8 +164,13 @@ export function ExpenseFormPage() {
         </Alert>
         <Paper sx={{ p: 3, maxWidth: 800 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>{existing.title}</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
             {formatCurrency(existing.amount)} · {existing.date}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Bill no.: {existing.billNo?.trim() ? existing.billNo : '—'}
+            {existing.paymentMethod ? ` · ${existing.paymentMethod}` : ''}
+            {existing.paidTo ? ` · Paid to ${existing.paidTo}` : ''}
           </Typography>
           <Button
             variant="outlined"

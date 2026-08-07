@@ -75,6 +75,7 @@ class PurchaseOrderPaymentCreate(BaseModel):
     amount: float = Field(gt=0)
     date: str
     payment_method: str = "cash"
+    bill_no: Optional[str] = None
     notes: str = ""
 
 
@@ -82,6 +83,7 @@ class PurchaseOrderPaymentResponse(BaseModel):
     amount: float
     date: str
     payment_method: str
+    bill_no: Optional[str] = None
     notes: str = ""
     expense_id: str = ""
     created_by: str = ""
@@ -91,10 +93,12 @@ class PurchaseOrderPaymentResponse(BaseModel):
 def payment_to_response(payment: PurchaseOrderPayment) -> PurchaseOrderPaymentResponse:
     created_at = payment.created_at
     created_at_str = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
+    bill_no = (getattr(payment, "bill_no", None) or "").strip() or None
     return PurchaseOrderPaymentResponse(
         amount=payment.amount,
         date=payment.date,
         payment_method=payment.payment_method,
+        bill_no=bill_no,
         notes=payment.notes or "",
         expense_id=payment.expense_id or "",
         created_by=payment.created_by or "",

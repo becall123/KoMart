@@ -30,6 +30,7 @@ class PurchaseOrderPayment(BaseModel):
     amount: float = Field(gt=0)
     date: str
     payment_method: str = "cash"
+    bill_no: Optional[str] = None
     notes: str = ""
     expense_id: str = ""
     created_by: str = ""

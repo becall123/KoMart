@@ -55,6 +55,7 @@ async def record_payment(
         )
 
     before = po_snapshot(po)
+    bill_no = (body.bill_no or "").strip() or None
     expense = Expense(
         title=f"PO payment {po.order_number}",
         description=body.notes.strip() or f"Payment for purchase order {po.order_number}",
@@ -62,6 +63,7 @@ async def record_payment(
         category=ExpenseCategory.purchase_order.value,
         date=body.date,
         paid_to=po.supplier_name,
+        bill_no=bill_no,
         payment_method=body.payment_method.strip() or "cash",
         is_setup_cost=False,
         purchase_order_id=str(po.id),
@@ -76,6 +78,7 @@ async def record_payment(
         amount=amount,
         date=body.date,
         payment_method=body.payment_method.strip() or "cash",
+        bill_no=bill_no,
         notes=body.notes.strip(),
         expense_id=str(expense.id),
         created_by=current_user.name,
@@ -136,6 +139,7 @@ async def record_payment(
             "title": expense.title,
             "amount": expense.amount,
             "category": str(getattr(expense.category, "value", expense.category)),
+            "bill_no": expense.bill_no or "",
             "purchase_order_id": str(po.id),
         },
     )

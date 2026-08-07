@@ -481,6 +481,7 @@ export function PurchaseOrderDetailPage() {
               <TableHead>
                 <TableRow sx={{ bgcolor: 'action.hover' }}>
                   <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Bill no.</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Method</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700 }}>Amount</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Notes</TableCell>
@@ -491,6 +492,7 @@ export function PurchaseOrderDetailPage() {
                 {(po.payments ?? []).map((payment, index) => (
                   <TableRow key={`${payment.expenseId}-${index}`}>
                     <TableCell>{formatDate(payment.date)}</TableCell>
+                    <TableCell>{payment.billNo?.trim() ? payment.billNo : '—'}</TableCell>
                     <TableCell sx={{ textTransform: 'capitalize' }}>{payment.paymentMethod}</TableCell>
                     <TableCell align="right">{formatCurrency(payment.amount)}</TableCell>
                     <TableCell>{payment.notes || '—'}</TableCell>
