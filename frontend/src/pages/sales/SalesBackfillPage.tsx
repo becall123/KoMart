@@ -778,7 +778,7 @@ export function SalesBackfillPage() {
               >
                 Post variance to Accounts
               </Button>
-              <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                 Posts a cash wallet adjustment so Accounts can match Actual Total. Sales stay at Expected.
               </Typography>
             </Box>
