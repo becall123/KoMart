@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Button, Chip, Paper, Typography } from '@mui/material';
+import { Box, Button, Chip, MenuItem, Paper, TextField, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -26,6 +26,20 @@ const PAYMENT_COLORS: Record<PurchaseOrderPaymentStatus, 'default' | 'warning' |
   paid: 'success',
 };
 
+const PO_STATUS_OPTIONS: PurchaseOrderStatus[] = [
+  'draft',
+  'ordered',
+  'partial',
+  'received',
+  'cancelled',
+];
+
+const PO_PAYMENT_OPTIONS: PurchaseOrderPaymentStatus[] = [
+  'unpaid',
+  'partial',
+  'paid',
+];
+
 export function PurchaseOrdersPage() {
   const navigate = useNavigate();
   const formatDate = useFormatDate();
@@ -33,8 +47,16 @@ export function PurchaseOrdersPage() {
   const canManage = canManagePurchaseOrders(user?.role);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const [status, setStatus] = useState<PurchaseOrderStatus | ''>('ordered');
+  const [paymentStatus, setPaymentStatus] = useState<PurchaseOrderPaymentStatus | ''>('unpaid');
 
-  const { data, isLoading } = usePurchaseOrders({ search, page: page + 1, pageSize: 10 });
+  const { data, isLoading } = usePurchaseOrders({
+    search,
+    page: page + 1,
+    pageSize: 10,
+    status: status || undefined,
+    paymentStatus: paymentStatus || undefined,
+  });
   const rows = data?.data ?? [];
 
   const columns: Column<PurchaseOrder>[] = [
@@ -62,11 +84,11 @@ export function PurchaseOrdersPage() {
       id: 'payment',
       label: 'Payment',
       render: (row) => {
-        const status = row.paymentStatus ?? 'unpaid';
+        const pay = row.paymentStatus ?? 'unpaid';
         return (
           <Chip
-            label={PO_PAYMENT_STATUS_LABELS[status] ?? status}
-            color={PAYMENT_COLORS[status]}
+            label={PO_PAYMENT_STATUS_LABELS[pay] ?? pay}
+            color={PAYMENT_COLORS[pay]}
             size="small"
             variant="outlined"
           />
@@ -156,12 +178,50 @@ export function PurchaseOrdersPage() {
         </Paper>
       </Box>
 
-      <Box sx={{ mb: 3 }}>
-        <SearchBar
-          value={search}
-          onChange={(v) => { setSearch(v); setPage(0); }}
-          placeholder="Search by PO number or supplier..."
-        />
+      <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Box sx={{ flex: 1, minWidth: 220 }}>
+          <SearchBar
+            value={search}
+            onChange={(v) => { setSearch(v); setPage(0); }}
+            placeholder="Search by PO number or supplier..."
+          />
+        </Box>
+        <TextField
+          select
+          size="small"
+          label="Status"
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value as PurchaseOrderStatus | '');
+            setPage(0);
+          }}
+          sx={{ minWidth: 180 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          {PO_STATUS_OPTIONS.map((value) => (
+            <MenuItem key={value} value={value}>
+              {PO_STATUS_LABELS[value]}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Payment"
+          value={paymentStatus}
+          onChange={(e) => {
+            setPaymentStatus(e.target.value as PurchaseOrderPaymentStatus | '');
+            setPage(0);
+          }}
+          sx={{ minWidth: 160 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          {PO_PAYMENT_OPTIONS.map((value) => (
+            <MenuItem key={value} value={value}>
+              {PO_PAYMENT_STATUS_LABELS[value]}
+            </MenuItem>
+          ))}
+        </TextField>
       </Box>
 
       <DataTable

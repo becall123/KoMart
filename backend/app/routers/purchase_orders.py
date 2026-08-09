@@ -199,16 +199,62 @@ async def list_purchase_orders(
     page_size: int = Query(10, ge=1, le=500),
     search: str = Query(""),
     supplier_id: str = Query(""),
+    status: str = Query(""),
+    payment_status: str = Query(""),
     _: User = Depends(get_current_user),
 ):
-    match: dict = {}
+    and_clauses: list[dict] = []
+
     if supplier_id:
-        match["supplier_id"] = supplier_id
+        and_clauses.append({"supplier_id": supplier_id})
+
+    status_filter = (status or "").strip().lower()
+    if status_filter:
+        try:
+            po_status = POStatus(status_filter)
+        except ValueError as exc:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status. Use one of: {', '.join(s.value for s in POStatus)}",
+            ) from exc
+        and_clauses.append({"status": po_status.value})
+
+    payment_filter = (payment_status or "").strip().lower()
+    if payment_filter:
+        try:
+            pay_status = PaymentStatus(payment_filter)
+        except ValueError as exc:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid payment_status. Use one of: {', '.join(s.value for s in PaymentStatus)}",
+            ) from exc
+        if pay_status == PaymentStatus.unpaid:
+            # Include legacy docs with missing/null/empty payment_status
+            and_clauses.append({
+                "$or": [
+                    {"payment_status": PaymentStatus.unpaid.value},
+                    {"payment_status": None},
+                    {"payment_status": ""},
+                    {"payment_status": {"$exists": False}},
+                ]
+            })
+        else:
+            and_clauses.append({"payment_status": pay_status.value})
+
     if search:
-        match["$or"] = [
-            {"order_number": {"$regex": search, "$options": "i"}},
-            {"supplier_name": {"$regex": search, "$options": "i"}},
-        ]
+        and_clauses.append({
+            "$or": [
+                {"order_number": {"$regex": search, "$options": "i"}},
+                {"supplier_name": {"$regex": search, "$options": "i"}},
+            ]
+        })
+
+    if not and_clauses:
+        match: dict = {}
+    elif len(and_clauses) == 1:
+        match = and_clauses[0]
+    else:
+        match = {"$and": and_clauses}
 
     col = PurchaseOrder.get_motor_collection()
     total = await col.count_documents(match)

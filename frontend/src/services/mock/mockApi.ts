@@ -567,16 +567,33 @@ export const mockApi = {
   // ── Purchase Orders ───────────────────────────────────────────────────────
   async getPurchaseOrders(params: ListQueryParams = {}): Promise<import('@/types').PurchaseOrderListResponse> {
     await delay(400);
-    const page = paginate(purchaseOrders, params);
+    let filtered = [...purchaseOrders];
+    const status = typeof params.status === 'string' ? params.status : undefined;
+    const paymentStatus = typeof params.paymentStatus === 'string' ? params.paymentStatus : undefined;
+
+    if (status) {
+      filtered = filtered.filter((po) => po.status === status);
+    }
+    if (paymentStatus) {
+      filtered = filtered.filter((po) => {
+        const pay = po.paymentStatus ?? 'unpaid';
+        if (paymentStatus === 'unpaid') {
+          return !po.paymentStatus || po.paymentStatus === 'unpaid';
+        }
+        return pay === paymentStatus;
+      });
+    }
+
+    const page = paginate(filtered, params);
     return {
       ...page,
       receivedTotalAmount: Math.round(
-        purchaseOrders
+        filtered
           .filter((po) => po.status === 'received')
           .reduce((sum, po) => sum + po.totalAmount, 0) * 100,
       ) / 100,
       outstandingAmount: Math.round(
-        purchaseOrders
+        filtered
           .filter((po) => po.status !== 'cancelled')
           .reduce((sum, po) => sum + Math.max(0, po.totalAmount - (po.amountPaid ?? 0)), 0) * 100,
       ) / 100,
