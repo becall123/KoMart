@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query, Request
 from math import ceil
 from datetime import datetime, timezone
+import logging
 
 from app.auth.dependencies import get_current_user, require_manager_or_above
 from app.models.user import User
@@ -27,6 +28,8 @@ from app.schemas.common import PaginatedResponse
 from app.models.audit_log import AuditModule
 from app.services.audit import log_audit, po_snapshot
 from app.services.store_settings import get_store_settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/purchase-orders", tags=["Purchase Orders"])
 
@@ -75,6 +78,14 @@ def _merge_items(existing: PurchaseOrder, incoming: list) -> list:
     return merged
 
 
+def _dt_iso(value) -> str:
+    if value is None:
+        return ""
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
 def _to_response(po: PurchaseOrder) -> PurchaseOrderResponse:
     amount_paid = float(getattr(po, "amount_paid", 0) or 0)
     total_amount = float(getattr(po, "total_amount", 0) or 0)
@@ -90,26 +101,13 @@ def _to_response(po: PurchaseOrder) -> PurchaseOrderResponse:
         payment_status = compute_payment_status(amount_paid, total_amount)
 
     payments = getattr(po, "payments", None) or []
-    created_at = getattr(po, "created_at", None)
-    updated_at = getattr(po, "updated_at", None)
-    created_at_str = (
-        created_at.isoformat()
-        if hasattr(created_at, "isoformat")
-        else (str(created_at) if created_at else "")
-    )
-    updated_at_str = (
-        updated_at.isoformat()
-        if hasattr(updated_at, "isoformat")
-        else (str(updated_at) if updated_at else "")
-    )
-
     return PurchaseOrderResponse(
         id=str(po.id),
         order_number=po.order_number,
         supplier_id=po.supplier_id,
         supplier_name=po.supplier_name,
         status=po.status,
-        items=[item_to_response(i) for i in po.items],
+        items=[item_to_response(i) for i in (po.items or [])],
         total_amount=total_amount,
         amount_paid=amount_paid,
         payment_status=payment_status,
@@ -118,9 +116,73 @@ def _to_response(po: PurchaseOrder) -> PurchaseOrderResponse:
         ordered_by=po.ordered_by,
         received_by=po.received_by,
         received_date=po.received_date,
-        created_at=created_at_str,
-        updated_at=updated_at_str,
+        created_at=_dt_iso(getattr(po, "created_at", None)),
+        updated_at=_dt_iso(getattr(po, "updated_at", None)),
     )
+
+
+def _parse_po_doc(doc: dict) -> PurchaseOrder | None:
+    """Parse a raw Mongo PO doc without failing the whole list on one bad row."""
+    try:
+        data = dict(doc)
+        oid = data.pop("_id", None)
+        po = PurchaseOrder.model_validate(data)
+        if oid is not None:
+            po.id = oid
+        return po
+    except Exception:
+        logger.exception("Failed to parse purchase_order %s", doc.get("_id"))
+        return None
+
+
+def _soft_response_from_doc(doc: dict) -> PurchaseOrderResponse:
+    """Minimal response when full Beanie/Pydantic parse fails."""
+    amount_paid = float(doc.get("amount_paid") or 0)
+    total_amount = float(doc.get("total_amount") or 0)
+    raw_status = doc.get("payment_status")
+    try:
+        payment_status = (
+            PaymentStatus(str(raw_status).strip().lower())
+            if raw_status
+            else compute_payment_status(amount_paid, total_amount)
+        )
+    except ValueError:
+        payment_status = compute_payment_status(amount_paid, total_amount)
+
+    raw_po_status = doc.get("status") or "draft"
+    try:
+        po_status = POStatus(str(raw_po_status).strip().lower())
+    except ValueError:
+        po_status = POStatus.draft
+
+    return PurchaseOrderResponse(
+        id=str(doc.get("_id") or ""),
+        order_number=str(doc.get("order_number") or ""),
+        supplier_id=str(doc.get("supplier_id") or ""),
+        supplier_name=str(doc.get("supplier_name") or ""),
+        status=po_status,
+        items=[],
+        total_amount=total_amount if total_amount >= 0 else 0.0,
+        amount_paid=amount_paid if amount_paid >= 0 else 0.0,
+        payment_status=payment_status,
+        payments=[],
+        expected_delivery=doc.get("expected_delivery"),
+        ordered_by=doc.get("ordered_by"),
+        received_by=doc.get("received_by"),
+        received_date=doc.get("received_date"),
+        created_at=_dt_iso(doc.get("created_at")),
+        updated_at=_dt_iso(doc.get("updated_at")),
+    )
+
+
+def _doc_to_response(doc: dict) -> PurchaseOrderResponse:
+    po = _parse_po_doc(doc)
+    if po is not None:
+        try:
+            return _to_response(po)
+        except Exception:
+            logger.exception("Failed to map purchase_order %s", doc.get("_id"))
+    return _soft_response_from_doc(doc)
 
 
 async def _next_po_number() -> str:
@@ -139,18 +201,6 @@ async def list_purchase_orders(
     supplier_id: str = Query(""),
     _: User = Depends(get_current_user),
 ):
-    query = PurchaseOrder.find()
-    if supplier_id:
-        query = query.find(PurchaseOrder.supplier_id == supplier_id)
-    if search:
-        query = query.find({"$or": [
-            {"order_number": {"$regex": search, "$options": "i"}},
-            {"supplier_name": {"$regex": search, "$options": "i"}},
-        ]})
-
-    total = await query.count()
-
-    # Aggregate summary totals without loading every document into Python first.
     match: dict = {}
     if supplier_id:
         match["supplier_id"] = supplier_id
@@ -159,7 +209,11 @@ async def list_purchase_orders(
             {"order_number": {"$regex": search, "$options": "i"}},
             {"supplier_name": {"$regex": search, "$options": "i"}},
         ]
+
     col = PurchaseOrder.get_motor_collection()
+    total = await col.count_documents(match)
+
+    # Aggregate summary totals without loading every document into Python first.
     summary_rows = await col.aggregate([
         {"$match": match} if match else {"$match": {}},
         {
@@ -169,7 +223,7 @@ async def list_purchase_orders(
                     "$sum": {
                         "$cond": [
                             {"$eq": ["$status", POStatus.received.value]},
-                            "$total_amount",
+                            {"$ifNull": ["$total_amount", 0]},
                             0,
                         ]
                     }
@@ -183,7 +237,7 @@ async def list_purchase_orders(
                                     0,
                                     {
                                         "$subtract": [
-                                            "$total_amount",
+                                            {"$ifNull": ["$total_amount", 0]},
                                             {"$ifNull": ["$amount_paid", 0]},
                                         ]
                                     },
@@ -196,17 +250,24 @@ async def list_purchase_orders(
             }
         },
     ]).to_list(1)
-    received_total_amount = round(float(summary_rows[0]["received_total_amount"]), 2) if summary_rows else 0.0
-    outstanding_amount = round(float(summary_rows[0]["outstanding_amount"]), 2) if summary_rows else 0.0
+    received_total_amount = (
+        round(float(summary_rows[0]["received_total_amount"] or 0), 2) if summary_rows else 0.0
+    )
+    outstanding_amount = (
+        round(float(summary_rows[0]["outstanding_amount"] or 0), 2) if summary_rows else 0.0
+    )
 
-    page_orders = (
-        await query.sort("-created_at")
+    # Motor fetch + per-doc soft parse so one legacy/corrupt PO cannot 500 the list.
+    raw_docs = (
+        await col.find(match)
+        .sort([("created_at", -1)])
         .skip((page - 1) * page_size)
         .limit(page_size)
-        .to_list()
+        .to_list(page_size)
     )
+    data = [_doc_to_response(doc) for doc in raw_docs]
     return PurchaseOrderListResponse(
-        data=[_to_response(po) for po in page_orders],
+        data=data,
         total=total,
         page=page,
         page_size=page_size,

@@ -78,15 +78,54 @@ class PurchaseOrderItem(BaseModel):
     base_uom: str = "pcs"
     units_per_buy_uom: int = Field(default=1, ge=1)
 
+    @field_validator("product_id", "product_name", mode="before")
+    @classmethod
+    def _coerce_required_strings(cls, v: Any) -> str:
+        return _coerce_str(v, "")
+
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def _coerce_quantity(cls, v: Any) -> Any:
+        if v is None:
+            return 1
+        try:
+            n = int(float(v))
+        except (TypeError, ValueError):
+            return 1
+        return n if n >= 1 else 1
+
+    @field_validator("unit_cost", mode="before")
+    @classmethod
+    def _coerce_unit_cost(cls, v: Any) -> Any:
+        if v is None:
+            return 0.0
+        try:
+            n = float(v)
+        except (TypeError, ValueError):
+            return 0.0
+        return n if n >= 0 else 0.0
+
     @field_validator("received_quantity", mode="before")
     @classmethod
     def _coerce_received_quantity(cls, v: Any) -> Any:
-        return 0 if v is None else v
+        if v is None:
+            return 0
+        try:
+            n = int(float(v))
+        except (TypeError, ValueError):
+            return 0
+        return n if n >= 0 else 0
 
     @field_validator("units_per_buy_uom", mode="before")
     @classmethod
     def _coerce_units_per_buy_uom(cls, v: Any) -> Any:
-        return 1 if v is None else v
+        if v is None:
+            return 1
+        try:
+            n = int(float(v))
+        except (TypeError, ValueError):
+            return 1
+        return n if n >= 1 else 1
 
     @field_validator("order_uom", "base_uom", mode="before")
     @classmethod
@@ -155,20 +194,67 @@ class PurchaseOrder(Document):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    @field_validator("order_number", "supplier_id", "supplier_name", mode="before")
+    @classmethod
+    def _coerce_required_strings(cls, v: Any) -> str:
+        return _coerce_str(v, "")
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _coerce_status(cls, v: Any) -> Any:
+        if v is None or v == "":
+            return POStatus.draft
+        if isinstance(v, POStatus):
+            return v
+        try:
+            return POStatus(str(v).strip().lower())
+        except ValueError:
+            return POStatus.draft
+
     @field_validator("amount_paid", mode="before")
     @classmethod
     def _coerce_amount_paid(cls, v: Any) -> Any:
-        return 0.0 if v is None else v
+        if v is None:
+            return 0.0
+        try:
+            n = float(v)
+        except (TypeError, ValueError):
+            return 0.0
+        return n if n >= 0 else 0.0
 
     @field_validator("total_amount", mode="before")
     @classmethod
     def _coerce_total_amount(cls, v: Any) -> Any:
-        return 0.0 if v is None else v
+        if v is None:
+            return 0.0
+        try:
+            n = float(v)
+        except (TypeError, ValueError):
+            return 0.0
+        return n if n >= 0 else 0.0
 
     @field_validator("items", mode="before")
     @classmethod
     def _coerce_items(cls, v: Any) -> Any:
-        return [] if v is None else v
+        if v is None:
+            return []
+        if not isinstance(v, list):
+            return []
+        cleaned: list[Any] = []
+        for entry in v:
+            try:
+                if isinstance(entry, PurchaseOrderItem):
+                    item = entry
+                elif isinstance(entry, dict):
+                    item = PurchaseOrderItem.model_validate(entry)
+                else:
+                    continue
+                if not (item.product_id or item.product_name):
+                    continue
+                cleaned.append(item)
+            except Exception:
+                continue
+        return cleaned
 
     @field_validator("payments", mode="before")
     @classmethod
@@ -205,7 +291,6 @@ class PurchaseOrder(Document):
 
     @model_validator(mode="after")
     def _reconcile_payment_status(self) -> "PurchaseOrder":
-        # If status was force-defaulted to unpaid but amounts say otherwise, recompute.
         expected = compute_payment_status(self.amount_paid, self.total_amount)
         if self.payment_status != expected and self.payment_status == PaymentStatus.unpaid and self.amount_paid > 0:
             self.payment_status = expected

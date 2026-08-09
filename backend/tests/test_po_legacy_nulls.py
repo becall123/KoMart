@@ -68,12 +68,32 @@ async def _insert_legacy_po(*, order_number: str, total_amount: float = 1000.0) 
                 "order_uom": None,
                 "base_uom": None,
                 "units_per_buy_uom": None,
-            }
+            },
+            {
+                # Severely broken line — should be skipped, not crash the PO
+                "product_id": None,
+                "product_name": None,
+                "quantity": 0,
+                "unit_cost": None,
+                "units_per_buy_uom": 0,
+            },
         ],
         "total_amount": total_amount,
         "amount_paid": None,
         "payment_status": "not-a-real-status",
-        "payments": None,
+        "payments": [
+            None,
+            {"amount": 0, "date": "2026-01-01"},  # invalid amount — skip
+            {
+                "amount": 50,
+                "date": "2026-01-02",
+                "payment_method": None,
+                "notes": None,
+                "expense_id": None,
+                "created_by": None,
+                "created_at": None,
+            },
+        ],
         "expected_delivery": None,
         "ordered_by": "Tester",
         "received_by": None,
@@ -110,9 +130,10 @@ async def test_list_purchase_orders_tolerates_legacy_null_fields(
         payment_status = match.get("payment_status", match.get("paymentStatus"))
         assert payment_status in ("unpaid", "partial", "paid")
         payments = match.get("payments") or []
-        assert payments == []
+        assert len(payments) == 1
+        assert float(payments[0].get("amount", 0)) == 50.0
         items = match.get("items") or []
-        assert items
+        assert len(items) == 1
         item0 = items[0]
         assert item0.get("units_per_buy_uom", item0.get("unitsPerBuyUom")) == 1
         assert item0.get("received_quantity", item0.get("receivedQuantity")) == 0
@@ -172,7 +193,9 @@ async def test_beanie_loads_legacy_null_po_document():
         po = await PurchaseOrder.get(po_id)
         assert po is not None
         assert po.amount_paid == 0.0
-        assert po.payments == []
+        assert len(po.payments) == 1
+        assert po.payments[0].amount == 50.0
+        assert len(po.items) == 1
         assert po.items[0].units_per_buy_uom == 1
         assert po.items[0].received_quantity == 0
         assert po.items[0].order_uom == "pcs"
