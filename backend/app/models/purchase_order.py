@@ -1,6 +1,6 @@
 from beanie import Document
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import BaseModel, Field, field_validator, model_validator
+from typing import Any, Optional
 from enum import Enum
 from datetime import datetime, timezone
 from pymongo import IndexModel, ASCENDING, DESCENDING
@@ -26,6 +26,12 @@ class PaymentStatus(str, Enum):
     paid = "paid"
 
 
+def _coerce_str(value: Any, default: str = "") -> str:
+    if value is None:
+        return default
+    return str(value)
+
+
 class PurchaseOrderPayment(BaseModel):
     amount: float = Field(gt=0)
     date: str
@@ -35,6 +41,31 @@ class PurchaseOrderPayment(BaseModel):
     expense_id: str = ""
     created_by: str = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("payment_method", mode="before")
+    @classmethod
+    def _coerce_payment_method(cls, v: Any) -> str:
+        return _coerce_str(v, "cash") or "cash"
+
+    @field_validator("notes", "expense_id", "created_by", mode="before")
+    @classmethod
+    def _coerce_optional_strings(cls, v: Any) -> str:
+        return _coerce_str(v, "")
+
+    @field_validator("bill_no", mode="before")
+    @classmethod
+    def _coerce_bill_no(cls, v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        text = str(v).strip()
+        return text or None
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _coerce_created_at(cls, v: Any) -> Any:
+        if v is None:
+            return datetime.now(timezone.utc)
+        return v
 
 
 class PurchaseOrderItem(BaseModel):
@@ -46,6 +77,21 @@ class PurchaseOrderItem(BaseModel):
     order_uom: str = "pcs"
     base_uom: str = "pcs"
     units_per_buy_uom: int = Field(default=1, ge=1)
+
+    @field_validator("received_quantity", mode="before")
+    @classmethod
+    def _coerce_received_quantity(cls, v: Any) -> Any:
+        return 0 if v is None else v
+
+    @field_validator("units_per_buy_uom", mode="before")
+    @classmethod
+    def _coerce_units_per_buy_uom(cls, v: Any) -> Any:
+        return 1 if v is None else v
+
+    @field_validator("order_uom", "base_uom", mode="before")
+    @classmethod
+    def _coerce_uom(cls, v: Any) -> str:
+        return _coerce_str(v, "pcs") or "pcs"
 
     @property
     def base_quantity_ordered(self) -> int:
@@ -80,6 +126,18 @@ def compute_payment_status(amount_paid: float, total_amount: float) -> PaymentSt
     return PaymentStatus.partial
 
 
+def _safe_payment(raw: Any) -> PurchaseOrderPayment | None:
+    """Parse one payment entry; skip invalid legacy rows instead of failing the PO."""
+    try:
+        if isinstance(raw, PurchaseOrderPayment):
+            return raw
+        if not isinstance(raw, dict):
+            return None
+        return PurchaseOrderPayment.model_validate(raw)
+    except Exception:
+        return None
+
+
 class PurchaseOrder(Document):
     order_number: str
     supplier_id: str
@@ -96,6 +154,62 @@ class PurchaseOrder(Document):
     received_date: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("amount_paid", mode="before")
+    @classmethod
+    def _coerce_amount_paid(cls, v: Any) -> Any:
+        return 0.0 if v is None else v
+
+    @field_validator("total_amount", mode="before")
+    @classmethod
+    def _coerce_total_amount(cls, v: Any) -> Any:
+        return 0.0 if v is None else v
+
+    @field_validator("items", mode="before")
+    @classmethod
+    def _coerce_items(cls, v: Any) -> Any:
+        return [] if v is None else v
+
+    @field_validator("payments", mode="before")
+    @classmethod
+    def _coerce_payments(cls, v: Any) -> list[Any]:
+        if v is None:
+            return []
+        if not isinstance(v, list):
+            return []
+        cleaned: list[Any] = []
+        for entry in v:
+            payment = _safe_payment(entry)
+            if payment is not None:
+                cleaned.append(payment)
+        return cleaned
+
+    @field_validator("payment_status", mode="before")
+    @classmethod
+    def _coerce_payment_status(cls, v: Any) -> Any:
+        if v is None or v == "":
+            return PaymentStatus.unpaid
+        if isinstance(v, PaymentStatus):
+            return v
+        try:
+            return PaymentStatus(str(v).strip().lower())
+        except ValueError:
+            return PaymentStatus.unpaid
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def _coerce_timestamps(cls, v: Any) -> Any:
+        if v is None:
+            return datetime.now(timezone.utc)
+        return v
+
+    @model_validator(mode="after")
+    def _reconcile_payment_status(self) -> "PurchaseOrder":
+        # If status was force-defaulted to unpaid but amounts say otherwise, recompute.
+        expected = compute_payment_status(self.amount_paid, self.total_amount)
+        if self.payment_status != expected and self.payment_status == PaymentStatus.unpaid and self.amount_paid > 0:
+            self.payment_status = expected
+        return self
 
     class Settings:
         name = "purchase_orders"

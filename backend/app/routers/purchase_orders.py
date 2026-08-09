@@ -77,8 +77,32 @@ def _merge_items(existing: PurchaseOrder, incoming: list) -> list:
 
 def _to_response(po: PurchaseOrder) -> PurchaseOrderResponse:
     amount_paid = float(getattr(po, "amount_paid", 0) or 0)
-    payment_status = getattr(po, "payment_status", None) or compute_payment_status(amount_paid, po.total_amount)
+    total_amount = float(getattr(po, "total_amount", 0) or 0)
+    raw_status = getattr(po, "payment_status", None)
+    if isinstance(raw_status, PaymentStatus):
+        payment_status = raw_status
+    elif raw_status:
+        try:
+            payment_status = PaymentStatus(str(raw_status).strip().lower())
+        except ValueError:
+            payment_status = compute_payment_status(amount_paid, total_amount)
+    else:
+        payment_status = compute_payment_status(amount_paid, total_amount)
+
     payments = getattr(po, "payments", None) or []
+    created_at = getattr(po, "created_at", None)
+    updated_at = getattr(po, "updated_at", None)
+    created_at_str = (
+        created_at.isoformat()
+        if hasattr(created_at, "isoformat")
+        else (str(created_at) if created_at else "")
+    )
+    updated_at_str = (
+        updated_at.isoformat()
+        if hasattr(updated_at, "isoformat")
+        else (str(updated_at) if updated_at else "")
+    )
+
     return PurchaseOrderResponse(
         id=str(po.id),
         order_number=po.order_number,
@@ -86,16 +110,16 @@ def _to_response(po: PurchaseOrder) -> PurchaseOrderResponse:
         supplier_name=po.supplier_name,
         status=po.status,
         items=[item_to_response(i) for i in po.items],
-        total_amount=po.total_amount,
+        total_amount=total_amount,
         amount_paid=amount_paid,
-        payment_status=payment_status if isinstance(payment_status, PaymentStatus) else PaymentStatus(payment_status),
+        payment_status=payment_status,
         payments=[payment_to_response(p) for p in payments],
         expected_delivery=po.expected_delivery,
         ordered_by=po.ordered_by,
         received_by=po.received_by,
         received_date=po.received_date,
-        created_at=po.created_at.isoformat(),
-        updated_at=po.updated_at.isoformat(),
+        created_at=created_at_str,
+        updated_at=updated_at_str,
     )
 
 

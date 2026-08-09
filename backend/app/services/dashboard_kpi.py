@@ -18,7 +18,6 @@ from app.services.fiscal_year import (
     month_start_date,
 )
 from app.services.payment_methods import normalize_payment_method
-from app.services.po_payment import remaining_balance
 from app.services.reporting import (
     aggregate_sales_total,
     build_product_cache,
@@ -134,10 +133,34 @@ async def current_bank_balance(settings: StoreSettings, fy_start: datetime) -> f
 
 
 async def total_payables() -> float:
-    orders = await PurchaseOrder.find(
-        {"status": {"$ne": POStatus.cancelled.value}}
-    ).to_list()
-    return round(sum(remaining_balance(po) for po in orders), 2)
+    """Outstanding PO balance via aggregation — no Beanie document hydration."""
+    col = PurchaseOrder.get_motor_collection()
+    rows = await col.aggregate(
+        [
+            {"$match": {"status": {"$ne": POStatus.cancelled.value}}},
+            {
+                "$group": {
+                    "_id": None,
+                    "outstanding": {
+                        "$sum": {
+                            "$max": [
+                                0,
+                                {
+                                    "$subtract": [
+                                        {"$ifNull": ["$total_amount", 0]},
+                                        {"$ifNull": ["$amount_paid", 0]},
+                                    ]
+                                },
+                            ]
+                        }
+                    },
+                }
+            },
+        ]
+    ).to_list(1)
+    if not rows:
+        return 0.0
+    return round(float(rows[0].get("outstanding") or 0), 2)
 
 
 async def _wallet_period_net(date_gte: str, date_lte: str) -> float:
