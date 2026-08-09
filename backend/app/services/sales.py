@@ -25,6 +25,7 @@ from app.services.stock import (
     restock_from_deductions,
 )
 from app.services.store_settings import get_store_settings
+from app.services.time_nepal import resolve_sale_created_at
 from beanie import PydanticObjectId
 
 
@@ -339,18 +340,7 @@ async def record_sale(
         txn_payload["items"] = enriched_items
         txn_payload["total_cost"] = total_cost
 
-        created_at = datetime.now(timezone.utc)
-        if body.sale_date:
-            try:
-                parsed = datetime.fromisoformat(body.sale_date)
-            except ValueError as exc:
-                raise HTTPException(
-                    status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid sale_date; use YYYY-MM-DD",
-                ) from exc
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            created_at = parsed
+        created_at = resolve_sale_created_at(body.sale_date)
 
         txn = Transaction(
             transaction_number=txn_number,

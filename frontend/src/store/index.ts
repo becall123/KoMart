@@ -135,7 +135,12 @@ export const useDashboardStore = create<DashboardState>()(
 import { cartLineKey } from '@/utils/cartLine';
 
 function todayDateString(): string {
-  return new Date().toISOString().split('T')[0];
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kathmandu',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
 }
 
 interface CartState {

@@ -7,8 +7,7 @@ import { SearchBar } from '@/components/common/SearchBar';
 import { DateRangePicker } from '@/components/common/DateRangePicker';
 import { DataTable, type Column } from '@/components/tables/DataTable';
 import { useTransactions } from '@/hooks/useTransactions';
-import { formatCurrency, isAdmin } from '@/utils';
-import { useFormatDate } from '@/hooks/useFormatDate';
+import { formatCurrency, formatDateTime, isAdmin } from '@/utils';
 import { PAYMENT_METHODS } from '@/constants';
 import { useAuthStore } from '@/store';
 import type { PaymentMethod, Transaction } from '@/types';
@@ -16,7 +15,6 @@ import dayjs from 'dayjs';
 
 export function SalesPage() {
   const navigate = useNavigate();
-  const formatDate = useFormatDate();
   const user = useAuthStore((s) => s.user);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
@@ -68,7 +66,7 @@ export function SalesPage() {
     {
       id: 'date',
       label: 'Date',
-      render: (r) => formatDate(r.createdAt),
+      render: (r) => formatDateTime(r.createdAt),
     },
   ];
 

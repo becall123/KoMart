@@ -77,6 +77,7 @@ export function formatExpiryDate(date: string | Date): string {
 
 export function formatDateTime(date: string | Date): string {
   return new Date(date).toLocaleString('en-US', {
+    timeZone: 'Asia/Kathmandu',
     year: 'numeric',
     month: 'short',
     day: 'numeric',

@@ -70,7 +70,12 @@ async def list_transactions(
         ]})
 
     total = await query.count()
-    txns = await query.sort("-created_at").skip((page - 1) * page_size).limit(page_size).to_list()
+    txns = (
+        await query.sort([("created_at", -1), ("_id", -1)])
+        .skip((page - 1) * page_size)
+        .limit(page_size)
+        .to_list()
+    )
     return PaginatedResponse(
         data=[_to_response(t) for t in txns],
         total=total,
