@@ -45,9 +45,10 @@ class StoreSettings(Document):
     fiscal_year_start_month: int = Field(default=7, ge=1, le=12)
     fiscal_year_start_day: int = Field(default=16, ge=1, le=31)
 
-    # Cash/Bank baselines for wallet legs of dashboard KPI
-    opening_bank_balance: float = Field(default=0.0)
-    opening_esewa_balance: float = Field(default=0.0)
+    # Cash/Bank baselines for wallet legs of dashboard KPI / Accounts
+    opening_cash_balance: float = Field(default=0.0, ge=0)
+    opening_bank_balance: float = Field(default=0.0, ge=0)
+    opening_esewa_balance: float = Field(default=0.0, ge=0)
 
     # Timestamps
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

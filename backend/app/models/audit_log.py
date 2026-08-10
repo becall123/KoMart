@@ -19,6 +19,7 @@ class AuditModule(str, Enum):
     customers = "customers"
     categories = "categories"
     discounts = "discounts"
+    accounts = "accounts"
 
 
 class AuditLog(Document):

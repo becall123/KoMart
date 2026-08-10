@@ -252,6 +252,42 @@ export function useUpsertDayClose() {
       void queryClient.invalidateQueries({
         queryKey: [...QUERY_KEYS.reports('dailySummary'), date],
       });
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.walletBalances });
+    },
+  });
+}
+
+export function useOpeningSuggestion(date: string, enabled = true) {
+  return useQuery({
+    queryKey: [...QUERY_KEYS.reports('dailySummary'), date, 'openingSuggestion'],
+    queryFn: () => dayCloseService.getOpeningSuggestion(date),
+    enabled: enabled && !!date,
+    staleTime: STALE_TIME.standard,
+  });
+}
+
+export function useCloseDay() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (date: string) => dayCloseService.close(date),
+    onSuccess: (_, date) => {
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.reports('dailySummary') });
+      void queryClient.invalidateQueries({
+        queryKey: [...QUERY_KEYS.reports('dailySummary'), date],
+      });
+    },
+  });
+}
+
+export function useReopenDay() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (date: string) => dayCloseService.reopen(date),
+    onSuccess: (_, date) => {
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.reports('dailySummary') });
+      void queryClient.invalidateQueries({
+        queryKey: [...QUERY_KEYS.reports('dailySummary'), date],
+      });
     },
   });
 }

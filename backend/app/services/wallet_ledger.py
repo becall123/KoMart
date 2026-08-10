@@ -26,6 +26,19 @@ _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 WALLETS = (Wallet.cash, Wallet.bank, Wallet.esewa)
 
 
+def _safe_amount(value: float | int | None) -> float:
+    """Coerce ledger/balance amounts; null/NaN → 0."""
+    if value is None:
+        return 0.0
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if n != n:  # NaN
+        return 0.0
+    return round(n, 2)
+
+
 def _parse_wallet(value: str) -> Wallet:
     normalized = normalize_payment_method(value)
     try:
@@ -398,6 +411,8 @@ async def day_totals(wallet: Wallet | str, day: str) -> dict[str, float]:
         "transfers_out": 0.0,
         "adjustments_in": 0.0,
         "adjustments_out": 0.0,
+        "custody_in": 0.0,
+        "custody_out": 0.0,
         "other_in": 0.0,
         "other_out": 0.0,
         "net": 0.0,
@@ -424,6 +439,11 @@ async def day_totals(wallet: Wallet | str, day: str) -> dict[str, float]:
                 out["adjustments_in"] += amt
             else:
                 out["adjustments_out"] += amt
+        elif et == WalletEntryType.custody.value:
+            if direction == WalletDirection.inflow.value:
+                out["custody_in"] += amt
+            else:
+                out["custody_out"] += amt
         elif direction == WalletDirection.inflow.value:
             out["other_in"] += amt
         else:
@@ -436,17 +456,36 @@ async def day_totals(wallet: Wallet | str, day: str) -> dict[str, float]:
 
 async def opening_baseline(wallet: Wallet, settings: StoreSettings | None = None) -> float:
     settings = settings or await get_store_settings()
+    if wallet == Wallet.cash:
+        return _safe_amount(getattr(settings, "opening_cash_balance", 0))
     if wallet == Wallet.bank:
-        return float(getattr(settings, "opening_bank_balance", 0) or 0)
+        return _safe_amount(getattr(settings, "opening_bank_balance", 0))
     if wallet == Wallet.esewa:
-        return float(getattr(settings, "opening_esewa_balance", 0) or 0)
+        return _safe_amount(getattr(settings, "opening_esewa_balance", 0))
     return 0.0
+
+
+async def till_expected_cash(*, today: date | None = None) -> float:
+    """Today's till expected = DayClose opening (or 0) + today's cash ledger net."""
+    today = today or date.today()
+    day_str = today.isoformat()
+    day_close = await DayClose.find_one(DayClose.date == day_str)
+    opening = _safe_amount(getattr(day_close, "opening_cash", 0)) if day_close else 0.0
+    net = await ledger_net(Wallet.cash, date_gte=day_str, date_lte=day_str)
+    return round(opening + net, 2)
+
+
+async def open_custody_total() -> float:
+    from app.models.cash_custody import CashCustody, CashCustodyStatus
+
+    rows = await CashCustody.find(CashCustody.status == CashCustodyStatus.held).to_list()
+    return round(sum(_safe_amount(r.amount) for r in rows), 2)
 
 
 async def current_wallet_balance(wallet: Wallet | str, *, today: date | None = None) -> float:
     """
-    Cash: today's till expected = DayClose opening (or 0) + today's ledger net.
-    Counted closing_cash is only for day-book variance, not live KPIs.
+    Cash (Accounts Total Cash): settings opening_cash_balance + all-time cash ledger net
+    (+ open custody is added in all_balances, not here for single-wallet callers).
     Bank/eSewa: settings opening + all ledger net.
     """
     today = today or date.today()
@@ -454,11 +493,9 @@ async def current_wallet_balance(wallet: Wallet | str, *, today: date | None = N
     settings = await get_store_settings()
 
     if w == Wallet.cash:
-        day_str = today.isoformat()
-        day_close = await DayClose.find_one(DayClose.date == day_str)
-        opening = float(day_close.opening_cash) if day_close else 0.0
-        net = await ledger_net(Wallet.cash, date_gte=day_str, date_lte=day_str)
-        return round(opening + net, 2)
+        baseline = await opening_baseline(Wallet.cash, settings)
+        net = await ledger_net(Wallet.cash)
+        return round(baseline + net, 2)
 
     baseline = await opening_baseline(w, settings)
     net = await ledger_net(w)
@@ -467,8 +504,12 @@ async def current_wallet_balance(wallet: Wallet | str, *, today: date | None = N
 
 async def all_balances(*, today: date | None = None) -> dict[str, float]:
     today = today or date.today()
+    cash_ledger = await current_wallet_balance(Wallet.cash, today=today)
+    with_staff = await open_custody_total()
     return {
-        "cash": await current_wallet_balance(Wallet.cash, today=today),
+        "cash": round(cash_ledger + with_staff, 2),
+        "cash_till_expected": await till_expected_cash(today=today),
+        "cash_with_staff": with_staff,
         "bank": await current_wallet_balance(Wallet.bank, today=today),
         "esewa": await current_wallet_balance(Wallet.esewa, today=today),
         "as_of": today.isoformat(),
@@ -480,11 +521,14 @@ async def list_ledger(
     wallet: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    entry_type: str | None = None,
     limit: int = 200,
 ) -> list[WalletLedgerEntry]:
     match: dict[str, Any] = {}
     if wallet:
         match["wallet"] = _parse_wallet(wallet).value
+    if entry_type:
+        match["entry_type"] = entry_type.strip().lower()
     if date_from or date_to:
         match["date"] = {}
         if date_from:
@@ -510,9 +554,10 @@ async def build_day_book(day: str) -> list[dict[str, Any]]:
     for w in WALLETS:
         totals = await day_totals(w, day)
         if w == Wallet.cash:
-            opening = float(day_close.opening_cash) if day_close else 0.0
+            opening = _safe_amount(getattr(day_close, "opening_cash", 0)) if day_close else 0.0
             expected = round(opening + totals["net"], 2)
-            closing = float(day_close.closing_cash) if day_close else None
+            closing_raw = getattr(day_close, "closing_cash", None) if day_close else None
+            closing = _safe_amount(closing_raw) if day_close and closing_raw is not None else None
             variance = round(closing - expected, 2) if closing is not None else None
         else:
             baseline = await opening_baseline(w, settings)
@@ -524,7 +569,7 @@ async def build_day_book(day: str) -> list[dict[str, Any]]:
                     statement = getattr(day_close, "closing_bank", None)
                 elif w == Wallet.esewa:
                     statement = getattr(day_close, "closing_esewa", None)
-            closing = float(statement) if statement is not None else None
+            closing = _safe_amount(statement) if statement is not None else None
             variance = round(closing - expected, 2) if closing is not None else None
 
         posted = await find_day_close_variance_entry(day, w.value)
@@ -537,6 +582,8 @@ async def build_day_book(day: str) -> list[dict[str, Any]]:
             "transfers_out": totals["transfers_out"],
             "adjustments_in": totals["adjustments_in"],
             "adjustments_out": totals["adjustments_out"],
+            "custody_in": totals.get("custody_in", 0.0),
+            "custody_out": totals.get("custody_out", 0.0),
             "expected": expected,
             "closing": closing,
             "variance": variance,

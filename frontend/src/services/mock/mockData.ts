@@ -706,6 +706,7 @@ export const mockStoreSettings: StoreSettings = {
   calendarSystem: 'BS',
   fiscalYearStartMonth: 7,
   fiscalYearStartDay: 16,
+  openingCashBalance: 0,
   openingBankBalance: 0,
   openingEsewaBalance: 0,
 };

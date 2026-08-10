@@ -194,6 +194,8 @@ class WalletDayBookBlock(BaseModel):
     transfers_out: float = 0.0
     adjustments_in: float = 0.0
     adjustments_out: float = 0.0
+    custody_in: float = 0.0
+    custody_out: float = 0.0
     expected: float
     closing: float | None = None
     variance: float | None = None
@@ -207,6 +209,9 @@ class DayCloseBlock(BaseModel):
     closing_bank: float | None = None
     closing_esewa: float | None = None
     notes: str = ""
+    status: str = "open"
+    closed_at: str | None = None
+    closed_by: str = ""
     updated_by: str = ""
     updated_at: str = ""
 

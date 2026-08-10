@@ -109,8 +109,9 @@ async def _sales_by_payment(
 
 
 async def current_cash_balance(today: date | None = None) -> float:
-    from app.services.wallet_ledger import current_wallet_balance, Wallet
-    return await current_wallet_balance(Wallet.cash, today=today)
+    from app.services.wallet_ledger import all_balances
+    data = await all_balances(today=today)
+    return float(data["cash"])
 
 
 async def current_wallet_balance(

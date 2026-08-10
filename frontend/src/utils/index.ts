@@ -43,15 +43,79 @@ export function downloadCsv(
   URL.revokeObjectURL(url);
 }
 
-export function formatAmount(amount: number): string {
+export function formatAmount(amount: number | null | undefined): string {
+  if (amount == null || !Number.isFinite(amount)) return '—';
   return amount.toLocaleString('en-NP', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 }
 
-export function formatCurrency(amount: number): string {
-  return `${CURRENCY_SYMBOL} ${formatAmount(amount)}`;
+export function formatCurrency(amount: number | null | undefined): string {
+  if (amount == null || !Number.isFinite(amount)) return '—';
+  const sign = amount < 0 ? '−' : '';
+  return `${sign}${CURRENCY_SYMBOL} ${formatAmount(Math.abs(amount))}`;
+}
+
+/** Signed ledger line, e.g. +Rs. 500 or −Rs. 200 */
+export function formatSignedCurrency(amount: number | null | undefined, direction: 'in' | 'out' | string): string {
+  if (amount == null || !Number.isFinite(amount)) return '—';
+  const sign = direction === 'in' ? '+' : direction === 'out' ? '−' : '';
+  return `${sign}${CURRENCY_SYMBOL} ${formatAmount(Math.abs(amount))}`;
+}
+
+const AUDIT_FIELD_LABELS: Record<string, string> = {
+  opening_cash: 'Opening cash',
+  closing_cash: 'Closing cash',
+  closing_bank: 'Bank closing',
+  closing_esewa: 'eSewa closing',
+  opening_cash_balance: 'Opening cash balance',
+  opening_bank_balance: 'Opening bank balance',
+  opening_esewa_balance: 'Opening eSewa balance',
+  from_wallet: 'From',
+  to_wallet: 'To',
+  held_by_name: 'Held by',
+  deposit_wallet: 'Deposit to',
+  taken_date: 'Taken date',
+  resolved_date: 'Resolved date',
+  amount: 'Amount',
+  wallet: 'Wallet',
+  direction: 'Direction',
+  status: 'Status',
+  date: 'Date',
+  remarks: 'Remarks',
+};
+
+export function formatAuditAction(action: string): string {
+  const labels: Record<string, string> = {
+    day_close_create: 'Day close created',
+    day_close_update: 'Day close updated',
+    day_close_close: 'Day closed (locked)',
+    day_close_reopen: 'Day reopened',
+    day_close_post_variance: 'Variance posted to ledger',
+    wallet_transfer: 'Wallet transfer',
+    wallet_adjustment: 'Wallet adjustment',
+    cash_custody_take: 'Cash taken — staff custody',
+    cash_custody_return: 'Cash returned to till',
+    cash_custody_deposit: 'Cash deposited from custody',
+  };
+  return labels[action] ?? action.replace(/_/g, ' ');
+}
+
+export function formatAuditField(key: string, value: unknown): string {
+  const label = AUDIT_FIELD_LABELS[key] ?? key.replace(/_/g, ' ');
+  if (value == null || value === '') return `${label}: —`;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${label}: ${formatCurrency(value)}`;
+  }
+  return `${label}: ${String(value)}`;
+}
+
+export function summarizeAuditValues(data: Record<string, unknown>): string {
+  const keys = Object.keys(data);
+  if (keys.length === 0) return '—';
+  const preview = keys.slice(0, 4).map((k) => formatAuditField(k, data[k])).join(' · ');
+  return keys.length > 4 ? `${preview} …` : preview;
 }
 
 export function uomLabel(value: string, options?: ReadonlyArray<{ value: string; label: string }>): string {

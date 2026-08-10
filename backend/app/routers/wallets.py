@@ -14,7 +14,7 @@ from app.schemas.wallet import (
     WalletTransferCreate,
 )
 from app.services import wallet_ledger as wl
-from app.services.audit import log_audit
+from app.services.audit import log_audit, wallet_transfer_snapshot, wallet_adjustment_snapshot
 from app.models.wallet_ledger import WalletLedgerEntry
 
 router = APIRouter(prefix="/wallets", tags=["Wallets"])
@@ -49,6 +49,7 @@ async def get_ledger(
     wallet: str | None = Query(None),
     date_from: str | None = Query(None),
     date_to: str | None = Query(None),
+    entry_type: str | None = Query(None),
     limit: int = Query(200, ge=1, le=500),
     _: User = Depends(get_current_user),
 ):
@@ -57,6 +58,7 @@ async def get_ledger(
         wallet=wallet,
         date_from=date_from,
         date_to=date_to,
+        entry_type=entry_type,
         limit=limit,
     )
     return [_to_entry(e) for e in entries]
@@ -78,19 +80,19 @@ async def transfer_funds(
         created_by=current_user.name,
     )
     await log_audit(
-        module=AuditModule.expenses,
-        action="create",
+        module=AuditModule.accounts,
+        action="wallet_transfer",
         user=current_user,
         request=request,
         entity_type="wallet_transfer",
-        entity_id=out_e.transfer_id,
-        new={
-            "from": body.from_wallet,
-            "to": body.to_wallet,
-            "amount": body.amount,
-            "date": body.date,
-            "remarks": body.remarks,
-        },
+        entity_id=out_e.transfer_id or str(out_e.id),
+        new=wallet_transfer_snapshot(
+            from_wallet=body.from_wallet,
+            to_wallet=body.to_wallet,
+            amount=body.amount,
+            date=body.date,
+            remarks=body.remarks,
+        ),
     )
     return [_to_entry(out_e), _to_entry(in_e)]
 
@@ -111,19 +113,19 @@ async def adjust_wallet(
         created_by=current_user.name,
     )
     await log_audit(
-        module=AuditModule.expenses,
-        action="create",
+        module=AuditModule.accounts,
+        action="wallet_adjustment",
         user=current_user,
         request=request,
         entity_type="wallet_adjustment",
         entity_id=str(entry.id),
-        new={
-            "wallet": body.wallet,
-            "amount": body.amount,
-            "direction": body.direction,
-            "date": body.date,
-            "remarks": body.remarks,
-        },
+        new=wallet_adjustment_snapshot(
+            wallet=body.wallet,
+            amount=body.amount,
+            direction=body.direction,
+            date=body.date,
+            remarks=body.remarks,
+        ),
     )
     return _to_entry(entry)
 

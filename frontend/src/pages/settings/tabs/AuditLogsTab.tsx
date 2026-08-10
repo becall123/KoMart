@@ -17,8 +17,8 @@ import {
 import { DataTable, type Column } from '@/components/tables/DataTable';
 import { NepaliAwareDatePicker } from '@/components/common/NepaliAwareDatePicker';
 import { useAuditLogs } from '@/hooks/useAuditLogs';
-import { AUDIT_MODULE_LABELS } from '@/constants';
-import { formatDateTime } from '@/utils';
+import { AUDIT_ACTION_LABELS, AUDIT_MODULE_LABELS } from '@/constants';
+import { formatAuditAction, formatAuditField, formatDateTime, summarizeAuditValues } from '@/utils';
 import type { AuditLog, AuditModule } from '@/types';
 
 const MODULES: AuditModule[] = [
@@ -29,13 +29,21 @@ const MODULES: AuditModule[] = [
   'purchase_orders',
   'settings',
   'users',
+  'expenses',
+  'accounts',
 ];
 
-function summarizeValues(data: Record<string, unknown>): string {
-  const keys = Object.keys(data);
-  if (keys.length === 0) return '—';
-  const preview = keys.slice(0, 3).map((k) => `${k}: ${String(data[k])}`).join(', ');
-  return keys.length > 3 ? `${preview}…` : preview;
+function entityLabel(row: AuditLog): string {
+  if (!row.entityType) return '—';
+  const labels: Record<string, string> = {
+    day_close: 'Day close',
+    cash_custody: 'Staff custody',
+    wallet_transfer: 'Transfer',
+    wallet_adjustment: 'Adjustment',
+    store_settings: 'Store settings',
+  };
+  const type = labels[row.entityType] ?? row.entityType.replace(/_/g, ' ');
+  return row.entityId ? `${type} · …${row.entityId.slice(-6)}` : type;
 }
 
 export function AuditLogsTab() {
@@ -85,23 +93,32 @@ export function AuditLogsTab() {
         />
       ),
     },
-    { id: 'action', label: 'Action', render: (row) => row.action },
+    {
+      id: 'action',
+      label: 'Action',
+      minWidth: 180,
+      render: (row) => AUDIT_ACTION_LABELS[row.action] ?? formatAuditAction(row.action),
+    },
     {
       id: 'entity',
       label: 'Entity',
       minWidth: 160,
-      render: (row) =>
-        row.entityType ? `${row.entityType}${row.entityId ? ` #${row.entityId.slice(-6)}` : ''}` : '—',
+      render: (row) => entityLabel(row),
+    },
+    {
+      id: 'summary',
+      label: 'Summary',
+      minWidth: 220,
+      render: (row) => (
+        <Typography variant="body2" color="text.secondary" noWrap title={summarizeAuditValues(row.newValue)}>
+          {summarizeAuditValues(row.newValue)}
+        </Typography>
+      ),
     },
     {
       id: 'device',
       label: 'Device',
       render: (row) => `${row.browser} / ${row.device}`,
-    },
-    {
-      id: 'ip',
-      label: 'IP',
-      render: (row) => row.ipAddress || '—',
     },
   ];
 
@@ -133,7 +150,7 @@ export function AuditLogsTab() {
               label="Action"
               value={actionFilter}
               onChange={(e) => { setActionFilter(e.target.value); setPage(0); }}
-              placeholder="e.g. login, create"
+              placeholder="e.g. wallet_transfer, day_close"
             />
           </Grid>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -183,34 +200,48 @@ export function AuditLogsTab() {
                 <strong>User:</strong> {selected.userName} ({selected.userEmail})
               </Typography>
               <Typography variant="body2">
-                <strong>Action:</strong> {AUDIT_MODULE_LABELS[selected.module]} — {selected.action}
+                <strong>Action:</strong>{' '}
+                {AUDIT_MODULE_LABELS[selected.module] ?? selected.module} —{' '}
+                {AUDIT_ACTION_LABELS[selected.action] ?? formatAuditAction(selected.action)}
               </Typography>
               <Typography variant="body2">
-                <strong>Entity:</strong> {selected.entityType} {selected.entityId}
+                <strong>Entity:</strong> {entityLabel(selected)}
               </Typography>
               <Typography variant="body2">
-                <strong>Request ID:</strong> {selected.requestId}
+                <strong>Request ID:</strong> {selected.requestId || '—'}
               </Typography>
               <Typography variant="body2">
-                <strong>Client:</strong> {selected.browser} on {selected.device} — {selected.ipAddress}
+                <strong>Client:</strong> {selected.browser} on {selected.device} — {selected.ipAddress || '—'}
               </Typography>
               <Box>
                 <Typography variant="subtitle2" gutterBottom>Previous</Typography>
-                <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', m: 0 }}>
-                  {summarizeValues(selected.previousValue)}
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  {summarizeAuditValues(selected.previousValue)}
                 </Typography>
-                <Typography variant="caption" component="pre" sx={{ whiteSpace: 'pre-wrap', mt: 1 }}>
-                  {JSON.stringify(selected.previousValue, null, 2)}
-                </Typography>
+                {Object.keys(selected.previousValue).length > 0 && (
+                  <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                    {Object.entries(selected.previousValue).map(([k, v]) => (
+                      <Typography key={k} component="li" variant="body2">
+                        {formatAuditField(k, v)}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
               </Box>
               <Box>
                 <Typography variant="subtitle2" gutterBottom>New</Typography>
-                <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', m: 0 }}>
-                  {summarizeValues(selected.newValue)}
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  {summarizeAuditValues(selected.newValue)}
                 </Typography>
-                <Typography variant="caption" component="pre" sx={{ whiteSpace: 'pre-wrap', mt: 1 }}>
-                  {JSON.stringify(selected.newValue, null, 2)}
-                </Typography>
+                {Object.keys(selected.newValue).length > 0 && (
+                  <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                    {Object.entries(selected.newValue).map(([k, v]) => (
+                      <Typography key={k} component="li" variant="body2">
+                        {formatAuditField(k, v)}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
               </Box>
             </Box>
           )}

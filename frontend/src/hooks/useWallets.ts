@@ -7,6 +7,7 @@ function ledgerFilterKey(params?: {
   wallet?: string;
   dateFrom?: string;
   dateTo?: string;
+  entryType?: string;
   limit?: number;
 }) {
   return JSON.stringify(params ?? {});
@@ -22,7 +23,13 @@ export function useWalletBalances(enabled = true) {
 }
 
 export function useWalletLedger(
-  params?: { wallet?: string; dateFrom?: string; dateTo?: string; limit?: number },
+  params?: {
+    wallet?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    entryType?: string;
+    limit?: number;
+  },
   enabled = true,
 ) {
   return useQuery({

@@ -671,6 +671,7 @@ export interface StoreSettings {
   calendarSystem: 'AD' | 'BS';
   fiscalYearStartMonth: number;
   fiscalYearStartDay: number;
+  openingCashBalance: number;
   openingBankBalance: number;
   openingEsewaBalance: number;
 }
@@ -955,6 +956,8 @@ export interface WalletDayBookBlock {
   transfersOut: number;
   adjustmentsIn: number;
   adjustmentsOut: number;
+  custodyIn?: number;
+  custodyOut?: number;
   expected: number;
   closing?: number | null;
   variance?: number | null;
@@ -968,6 +971,9 @@ export interface DayCloseRecord {
   closingBank?: number | null;
   closingEsewa?: number | null;
   notes?: string;
+  status?: 'open' | 'closed' | string;
+  closedAt?: string | null;
+  closedBy?: string;
   updatedBy?: string;
   updatedAt?: string;
 }
@@ -994,9 +1000,58 @@ export type WalletCode = 'cash' | 'bank' | 'esewa';
 
 export interface WalletBalances {
   cash: number;
+  cashTillExpected?: number;
+  cashWithStaff?: number;
   bank: number;
   esewa: number;
   asOf: string;
+}
+
+export interface CashCustody {
+  id: string;
+  amount: number;
+  heldByUserId: string;
+  heldByName: string;
+  status: 'held' | 'returned' | 'deposited' | string;
+  takenDate: string;
+  takenAt?: string;
+  resolvedDate?: string | null;
+  resolvedAt?: string | null;
+  depositWallet?: string | null;
+  remarks: string;
+  takenLedgerId?: string;
+  resolveLedgerId?: string;
+  createdBy?: string;
+}
+
+export interface CashCustodySummary {
+  totalHeld: number;
+  byHolder: Array<{ userId: string; name: string; amount: number }>;
+}
+
+export interface CashCustodyTakePayload {
+  amount: number;
+  heldByUserId: string;
+  takenDate: string;
+  remarks: string;
+}
+
+export interface CashCustodyReturnPayload {
+  resolvedDate: string;
+  remarks?: string;
+}
+
+export interface CashCustodyDepositPayload {
+  wallet: 'bank' | 'esewa' | string;
+  resolvedDate: string;
+  remarks?: string;
+}
+
+export interface DayOpeningSuggestion {
+  date: string;
+  suggestedOpeningCash: number;
+  yesterdayClosingCash?: number | null;
+  yesterdayDate?: string | null;
 }
 
 export interface WalletLedgerEntry {
@@ -1037,7 +1092,9 @@ export type AuditModule =
   | 'sales'
   | 'purchase_orders'
   | 'settings'
-  | 'users';
+  | 'users'
+  | 'expenses'
+  | 'accounts';
 
 export interface AuditLog {
   id: string;

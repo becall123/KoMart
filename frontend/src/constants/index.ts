@@ -161,6 +161,29 @@ export const AUDIT_MODULE_LABELS: Record<string, string> = {
   purchase_orders: 'Purchase Orders',
   settings: 'Settings',
   users: 'Users',
+  expenses: 'Expenses',
+  accounts: 'Accounts',
+  customers: 'Customers',
+  categories: 'Categories',
+  discounts: 'Discounts',
+};
+
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  day_close_create: 'Day close created',
+  day_close_update: 'Day close updated',
+  day_close_close: 'Day closed (locked)',
+  day_close_reopen: 'Day reopened',
+  day_close_post_variance: 'Variance posted to ledger',
+  wallet_transfer: 'Wallet transfer',
+  wallet_adjustment: 'Wallet adjustment',
+  cash_custody_take: 'Cash taken — staff custody',
+  cash_custody_return: 'Cash returned to till',
+  cash_custody_deposit: 'Cash deposited from custody',
+  create: 'Created',
+  update: 'Updated',
+  delete: 'Deleted',
+  login: 'Login',
+  logout: 'Logout',
 };
 
 export const MEMBERSHIP_TIER_LABELS: Record<string, string> = {
@@ -214,6 +237,9 @@ export const QUERY_KEYS = {
   wallets: ['wallets'] as const,
   walletBalances: ['wallets', 'balances'] as const,
   walletLedger: (filters?: string) => ['wallets', 'ledger', filters] as const,
+  cashCustodies: ['cashCustodies'] as const,
+  cashCustodySummary: ['cashCustodies', 'summary'] as const,
+  cashCustodyList: (filters?: string) => ['cashCustodies', 'list', filters] as const,
   reports: (type: string) => ['reports', type] as const,
   settings: ['settings'] as const,
   categories: ['categories'] as const,

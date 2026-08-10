@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -18,11 +18,21 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PrintIcon from '@mui/icons-material/Print';
 import SaveIcon from '@mui/icons-material/Save';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import LockIcon from '@mui/icons-material/Lock';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/common/PageHeader';
 import { NepaliAwareDatePicker } from '@/components/common/NepaliAwareDatePicker';
 import { StatCard } from '@/components/common/StatCard';
-import { useDailySummary, useUpsertDayClose, usePostDayCloseVariance } from '@/hooks/useReports';
+import {
+  useCloseDay,
+  useDailySummary,
+  useOpeningSuggestion,
+  usePostDayCloseVariance,
+  useReopenDay,
+  useUpsertDayClose,
+} from '@/hooks/useReports';
+import { useWalletTransfer } from '@/hooks/useWallets';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { PAYMENT_METHODS } from '@/constants';
 import { formatCurrency } from '@/utils';
@@ -55,6 +65,8 @@ function WalletSection({
   saving,
   onPostVariance,
   postingVariance,
+  readOnly,
+  openingHint,
 }: {
   title: string;
   block?: WalletDayBookBlock | null;
@@ -70,6 +82,8 @@ function WalletSection({
   saving?: boolean;
   onPostVariance?: () => void;
   postingVariance?: boolean;
+  readOnly?: boolean;
+  openingHint?: string;
 }) {
   const opening = block?.opening ?? 0;
   const salesIn = block?.salesIn ?? 0;
@@ -78,13 +92,19 @@ function WalletSection({
   const transfersOut = block?.transfersOut ?? 0;
   const adjustmentsIn = block?.adjustmentsIn ?? 0;
   const adjustmentsOut = block?.adjustmentsOut ?? 0;
+  const custodyIn = block?.custodyIn ?? 0;
+  const custodyOut = block?.custodyOut ?? 0;
   const expected = block?.expected ?? 0;
   const closing = block?.closing;
   const variance = block?.variance;
   const variancePosted = Boolean(block?.variancePosted);
   const showInputs = mode === 'cash' || mode === 'statement';
   const canPostVariance =
-    variance != null && Math.abs(variance) >= 0.01 && closing != null && !variancePosted;
+    !readOnly &&
+    variance != null &&
+    Math.abs(variance) >= 0.01 &&
+    closing != null &&
+    !variancePosted;
 
   return (
     <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
@@ -104,6 +124,8 @@ function WalletSection({
                   fullWidth
                   value={openingCash}
                   onChange={(e) => onOpeningChange?.(e.target.value)}
+                  disabled={readOnly}
+                  helperText={openingHint}
                   slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
                 />
               </Grid>
@@ -116,6 +138,7 @@ function WalletSection({
                 fullWidth
                 value={closingValue}
                 onChange={(e) => onClosingChange?.(e.target.value)}
+                disabled={readOnly}
                 placeholder={mode === 'statement' ? 'Leave blank if not reconciled' : undefined}
                 slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
               />
@@ -129,6 +152,7 @@ function WalletSection({
                     fullWidth
                     value={notes}
                     onChange={(e) => onNotesChange?.(e.target.value)}
+                    disabled={readOnly}
                     multiline
                     minRows={2}
                   />
@@ -139,6 +163,7 @@ function WalletSection({
                     startIcon={<SaveIcon />}
                     onClick={() => onSave?.()}
                     loading={saving}
+                    disabled={readOnly}
                   >
                     Save day close
                   </Button>
@@ -172,6 +197,12 @@ function WalletSection({
       <Line label="Transfers out" value={transfersOut} />
       <Line label="Adjustments in" value={adjustmentsIn} />
       <Line label="Adjustments out" value={adjustmentsOut} />
+      {(custodyIn > 0 || custodyOut > 0 || mode === 'cash') && (
+        <>
+          <Line label="Custody in (return)" value={custodyIn} />
+          <Line label="Custody out (take)" value={custodyOut} />
+        </>
+      )}
       <Divider sx={{ my: 1 }} />
       <Line label="Expected closing" value={expected} bold />
       {closing != null && <Line label="Closing" value={closing} />}
@@ -224,12 +255,12 @@ function WalletSection({
       )}
       {mode === 'cash' && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-          Expected = Opening + sales − expenses ± transfers ± adjustments
+          Expected = Opening + sales − expenses ± transfers ± adjustments ± custody
         </Typography>
       )}
       {mode === 'statement' && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-          Enter statement closing, then Save day close on Cash till. Variance = statement − expected.
+          Enter statement closing, then Save day close on Till. Variance = statement − expected.
         </Typography>
       )}
     </Paper>
@@ -242,16 +273,19 @@ function Line({
   bold,
 }: {
   label: string;
-  value: number;
+  value: number | null | undefined;
   bold?: boolean;
 }) {
+  const display = value == null || !Number.isFinite(value) ? '—' : formatCurrency(value);
+  const color =
+    value != null && Number.isFinite(value) && value < 0 ? 'error.main' : undefined;
   return (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
       <Typography variant="body2" color="text.secondary">
         {label}
       </Typography>
-      <Typography variant="body2" sx={{ fontWeight: bold ? 700 : 400 }}>
-        {formatCurrency(value)}
+      <Typography variant="body2" sx={{ fontWeight: bold ? 700 : 400 }} color={color}>
+        {display}
       </Typography>
     </Box>
   );
@@ -268,10 +302,18 @@ export function DailyReportPage() {
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [postWallet, setPostWallet] = useState<'cash' | 'bank' | 'esewa' | null>(null);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const suggestedAppliedFor = useRef<string | null>(null);
 
   const { data, isLoading, isError, refetch } = useDailySummary(date);
+  const { data: openingSuggestion } = useOpeningSuggestion(date);
   const upsertMutation = useUpsertDayClose();
   const postVarianceMutation = usePostDayCloseVariance();
+  const closeDayMutation = useCloseDay();
+  const reopenDayMutation = useReopenDay();
+  const transferMutation = useWalletTransfer();
+
+  const dayClosed = data?.dayClose?.status === 'closed';
 
   useEffect(() => {
     if (!data) return;
@@ -285,6 +327,18 @@ export function DailyReportPage() {
     );
     setNotes(data.dayClose?.notes ?? '');
   }, [data]);
+
+  useEffect(() => {
+    if (!openingSuggestion || data?.dayClose) return;
+    if (suggestedAppliedFor.current === date) return;
+    suggestedAppliedFor.current = date;
+    setOpeningCash(String(openingSuggestion.suggestedOpeningCash ?? 0));
+  }, [openingSuggestion, data?.dayClose, date]);
+
+  const openingMismatch =
+    !data?.dayClose &&
+    (openingSuggestion?.yesterdayClosingCash ?? 0) > 0 &&
+    parseFloat(openingCash || '0') === 0;
 
   const parseOptionalClosing = (raw: string): number | null | 'invalid' => {
     const trimmed = raw.trim();
@@ -326,6 +380,54 @@ export function DailyReportPage() {
     }
   };
 
+  const handleQuickTransfer = async (from: 'cash' | 'bank', to: 'cash' | 'bank', label: string) => {
+    setError('');
+    const amountRaw = window.prompt(`${label} — enter amount (NPR):`);
+    if (amountRaw == null) return;
+    const amount = parseFloat(amountRaw);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Enter a valid transfer amount.');
+      return;
+    }
+    try {
+      await transferMutation.mutateAsync({
+        fromWallet: from,
+        toWallet: to,
+        amount,
+        date,
+        remarks: `${label} · ${date}`,
+      });
+      showSuccess(`${label} recorded.`);
+      await refetch();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  };
+
+  const handleCloseDay = async () => {
+    setError('');
+    try {
+      await closeDayMutation.mutateAsync(date);
+      showSuccess('Day closed.');
+      setConfirmClose(false);
+      await refetch();
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setConfirmClose(false);
+    }
+  };
+
+  const handleReopenDay = async () => {
+    setError('');
+    try {
+      await reopenDayMutation.mutateAsync(date);
+      showSuccess('Day reopened.');
+      await refetch();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  };
+
   const sales = data?.sales.totalRevenue ?? 0;
   const expenses = data?.expenses.total ?? 0;
   const net = sales - expenses;
@@ -341,6 +443,8 @@ export function DailyReportPage() {
     transfersOut: cash?.transfersOut ?? 0,
     adjustmentsIn: cash?.adjustmentsIn ?? 0,
     adjustmentsOut: cash?.adjustmentsOut ?? 0,
+    custodyIn: 0,
+    custodyOut: 0,
     expected: cash?.expected ?? 0,
     closing: cash?.closing ?? 0,
     variance: cash?.variance ?? 0,
@@ -348,8 +452,24 @@ export function DailyReportPage() {
   const bankBook = wallets.find((w) => w.wallet === 'bank');
   const esewaBook = wallets.find((w) => w.wallet === 'esewa');
 
+  const checklist = [
+    { label: 'Count till cash and save closing', done: (data?.dayClose?.closingCash ?? 0) > 0 || !!data?.dayClose },
+    {
+      label: 'Optional: bank / eSewa statement closings',
+      done: data?.dayClose?.closingBank != null || data?.dayClose?.closingEsewa != null,
+    },
+    {
+      label: 'Review variances (post if needed)',
+      done:
+        Math.abs(cashBook.variance ?? 0) < 0.01 ||
+        Boolean(cashBook.variancePosted) ||
+        (bankBook?.variancePosted ?? true),
+    },
+    { label: 'Close day', done: dayClosed },
+  ];
+
   const walletLabel = (wallet: string) =>
-    wallet === 'cash' ? 'Cash till' : wallet === 'bank' ? 'Bank' : 'eSewa';
+    wallet === 'cash' ? 'Till (today)' : wallet === 'bank' ? 'Bank' : 'eSewa';
 
   const blockForWallet = (wallet: 'cash' | 'bank' | 'esewa') => {
     if (wallet === 'cash') return cashBook;
@@ -416,6 +536,20 @@ export function DailyReportPage() {
             >
               Accounts
             </Button>
+            <Button
+              variant="outlined"
+              disabled={dayClosed || transferMutation.isPending}
+              onClick={() => void handleQuickTransfer('cash', 'bank', 'Deposit to bank')}
+            >
+              Deposit to bank
+            </Button>
+            <Button
+              variant="outlined"
+              disabled={dayClosed || transferMutation.isPending}
+              onClick={() => void handleQuickTransfer('bank', 'cash', 'Float from bank')}
+            >
+              Float from bank
+            </Button>
             <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => window.print()}>
               Print
             </Button>
@@ -444,6 +578,68 @@ export function DailyReportPage() {
           {error || 'Could not load day cash book.'}
         </Alert>
       )}
+
+      {!data?.dayClose && (
+        <Alert severity="info" sx={{ mb: 2 }} className="no-print">
+          Open till: set Opening cash (suggested from yesterday’s close), then Save day close.
+        </Alert>
+      )}
+
+      {openingMismatch && (
+        <Alert severity="warning" sx={{ mb: 2 }} className="no-print">
+          Opening is 0 but yesterday’s closing was{' '}
+          {formatCurrency(openingSuggestion?.yesterdayClosingCash ?? 0)}. Confirm before continuing.
+        </Alert>
+      )}
+
+      {dayClosed && (
+        <Alert
+          severity="success"
+          sx={{ mb: 2 }}
+          className="no-print"
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              startIcon={<LockOpenIcon />}
+              onClick={() => void handleReopenDay()}
+              loading={reopenDayMutation.isPending}
+            >
+              Reopen
+            </Button>
+          }
+        >
+          Day closed{data?.dayClose?.closedBy ? ` by ${data.dayClose.closedBy}` : ''}. Edits are locked.
+        </Alert>
+      )}
+
+      <Paper variant="outlined" sx={{ p: 2, mb: 2 }} className="no-print">
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+          Close-day checklist
+        </Typography>
+        {checklist.map((item) => (
+          <Typography
+            key={item.label}
+            variant="body2"
+            color={item.done ? 'success.main' : 'text.secondary'}
+            sx={{ mb: 0.5 }}
+          >
+            {item.done ? '✓' : '○'} {item.label}
+          </Typography>
+        ))}
+        {!dayClosed && (
+          <Button
+            sx={{ mt: 1 }}
+            variant="contained"
+            startIcon={<LockIcon />}
+            disabled={!data?.dayClose}
+            onClick={() => setConfirmClose(true)}
+            loading={closeDayMutation.isPending}
+          >
+            Close day
+          </Button>
+        )}
+      </Paper>
 
       <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }} className="print-only-block">
         KoMart Day Cash Book — {formatDate(date)}
@@ -478,7 +674,7 @@ export function DailyReportPage() {
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid size={{ xs: 12, md: 4 }}>
           <WalletSection
-            title="Cash till"
+            title="Till (today)"
             block={cashBook}
             mode="cash"
             openingCash={openingCash}
@@ -491,6 +687,12 @@ export function DailyReportPage() {
             saving={upsertMutation.isPending}
             onPostVariance={() => setPostWallet('cash')}
             postingVariance={postVarianceMutation.isPending && postWallet === 'cash'}
+            readOnly={dayClosed}
+            openingHint={
+              openingSuggestion?.yesterdayClosingCash != null
+                ? `Suggested ${formatCurrency(openingSuggestion.suggestedOpeningCash)}`
+                : undefined
+            }
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
@@ -502,6 +704,7 @@ export function DailyReportPage() {
             onClosingChange={setClosingBank}
             onPostVariance={() => setPostWallet('bank')}
             postingVariance={postVarianceMutation.isPending && postWallet === 'bank'}
+            readOnly={dayClosed}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
@@ -513,6 +716,7 @@ export function DailyReportPage() {
             onClosingChange={setClosingEsewa}
             onPostVariance={() => setPostWallet('esewa')}
             postingVariance={postVarianceMutation.isPending && postWallet === 'esewa'}
+            readOnly={dayClosed}
           />
         </Grid>
       </Grid>
@@ -557,6 +761,16 @@ export function DailyReportPage() {
         loading={postVarianceMutation.isPending}
         onConfirm={() => void handleConfirmPostVariance()}
         onCancel={() => setPostWallet(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmClose}
+        title="Close day"
+        message={`Lock ${formatDate(date)} after review? Further edits will require Reopen.`}
+        confirmLabel="Close day"
+        loading={closeDayMutation.isPending}
+        onConfirm={() => void handleCloseDay()}
+        onCancel={() => setConfirmClose(false)}
       />
 
       <style>{`

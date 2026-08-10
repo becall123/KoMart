@@ -197,6 +197,9 @@ async def daily_summary_report(
 
     day_close_block = None
     if day_close:
+        closed_at = getattr(day_close, "closed_at", None)
+        status_raw = getattr(day_close, "status", None) or "open"
+        status_val = status_raw.value if hasattr(status_raw, "value") else str(status_raw)
         day_close_block = DayCloseBlock(
             date=day_close.date,
             opening_cash=day_close.opening_cash,
@@ -204,6 +207,9 @@ async def daily_summary_report(
             closing_bank=getattr(day_close, "closing_bank", None),
             closing_esewa=getattr(day_close, "closing_esewa", None),
             notes=day_close.notes or "",
+            status=status_val,
+            closed_at=closed_at.isoformat() if closed_at else None,
+            closed_by=getattr(day_close, "closed_by", "") or "",
             updated_by=day_close.updated_by or day_close.created_by or "",
             updated_at=day_close.updated_at.isoformat(),
         )

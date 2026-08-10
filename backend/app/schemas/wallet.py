@@ -14,6 +14,8 @@ class WalletBalance(BaseModel):
 
 class WalletBalancesResponse(BaseModel):
     cash: float
+    cash_till_expected: float = 0.0
+    cash_with_staff: float = 0.0
     bank: float
     esewa: float
     as_of: str
@@ -59,6 +61,8 @@ class WalletDayBookBlock(BaseModel):
     transfers_out: float = 0.0
     adjustments_in: float = 0.0
     adjustments_out: float = 0.0
+    custody_in: float = 0.0
+    custody_out: float = 0.0
     expected: float
     closing: float | None = None
     variance: float | None = None

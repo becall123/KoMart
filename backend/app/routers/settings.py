@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException, status
 from pydantic import BaseModel, Field
 from pydantic import ConfigDict
 from typing import Optional, Literal
@@ -43,8 +43,9 @@ class SettingsUpdate(BaseModel):
     calendar_system: Optional[Literal["AD", "BS"]] = Field(None, alias="calendarSystem")
     fiscal_year_start_month: Optional[int] = Field(None, alias="fiscalYearStartMonth", ge=1, le=12)
     fiscal_year_start_day: Optional[int] = Field(None, alias="fiscalYearStartDay", ge=1, le=31)
-    opening_bank_balance: Optional[float] = Field(None, alias="openingBankBalance")
-    opening_esewa_balance: Optional[float] = Field(None, alias="openingEsewaBalance")
+    opening_cash_balance: Optional[float] = Field(None, alias="openingCashBalance", ge=0)
+    opening_bank_balance: Optional[float] = Field(None, alias="openingBankBalance", ge=0)
+    opening_esewa_balance: Optional[float] = Field(None, alias="openingEsewaBalance", ge=0)
 
 
 @router.get("")
@@ -68,6 +69,20 @@ async def update_settings(
         update_data["purchase_order_prefix"] = update_data["purchase_order_prefix"].strip().upper()
     if "default_payment_method" in update_data and update_data["default_payment_method"]:
         update_data["default_payment_method"] = update_data["default_payment_method"].strip().lower()
+    for balance_key in (
+        "opening_cash_balance",
+        "opening_bank_balance",
+        "opening_esewa_balance",
+    ):
+        if balance_key in update_data and update_data[balance_key] is not None:
+            val = float(update_data[balance_key])
+            if val < 0:
+                label = balance_key.replace("_", " ").title()
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    detail=f"{label} cannot be negative",
+                )
+            update_data[balance_key] = round(val, 2)
     if update_data:
         await settings.set(update_data)
         refreshed = await StoreSettings.find_one()

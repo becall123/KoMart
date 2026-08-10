@@ -35,6 +35,7 @@ const NUMERIC_KEYS = new Set([
   'expiryWarningDays',
   'fiscalYearStartMonth',
   'fiscalYearStartDay',
+  'openingCashBalance',
   'openingBankBalance',
   'openingEsewaBalance',
 ]);
@@ -74,6 +75,7 @@ function emptyForm(): StoreSettings {
     calendarSystem: 'BS',
     fiscalYearStartMonth: 7,
     fiscalYearStartDay: 16,
+    openingCashBalance: 0,
     openingBankBalance: 0,
     openingEsewaBalance: 0,
   };
@@ -354,6 +356,21 @@ export function StoreInfoTab() {
           </Grid>
           <Grid size={{ xs: 12, md: 4 }}>
             <TextField
+              label="Opening Cash Balance"
+              type="number"
+              value={form.openingCashBalance}
+              onChange={change('openingCashBalance')}
+              fullWidth
+              disabled={!canEdit}
+              helperText="Baseline for Accounts Total Cash (all-time)"
+              slotProps={{
+                htmlInput: { min: 0, step: 0.01 },
+                input: { startAdornment: <InputAdornment position="start">Rs.</InputAdornment> },
+              }}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <TextField
               label="Opening Bank Balance"
               type="number"
               value={form.openingBankBalance}
@@ -362,6 +379,7 @@ export function StoreInfoTab() {
               disabled={!canEdit}
               helperText="Baseline for Bank dashboard KPI"
               slotProps={{
+                htmlInput: { min: 0, step: 0.01 },
                 input: { startAdornment: <InputAdornment position="start">Rs.</InputAdornment> },
               }}
             />
@@ -376,10 +394,21 @@ export function StoreInfoTab() {
               disabled={!canEdit}
               helperText="Baseline for eSewa dashboard KPI"
               slotProps={{
+                htmlInput: { min: 0, step: 0.01 },
                 input: { startAdornment: <InputAdornment position="start">Rs.</InputAdornment> },
               }}
             />
           </Grid>
+          {form.openingCashBalance === 0 &&
+            form.openingBankBalance === 0 &&
+            form.openingEsewaBalance === 0 && (
+              <Grid size={12}>
+                <Alert severity="info">
+                  Opening wallet balances are all zero. Set baselines once so Accounts Total Cash and
+                  Bank/eSewa KPIs match real money on hand.
+                </Alert>
+              </Grid>
+            )}
 
           <SectionTitle>Appearance</SectionTitle>
           <Grid size={{ xs: 12, md: 4 }}>

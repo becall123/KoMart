@@ -692,6 +692,20 @@ export const dayCloseService = {
     const { data } = await apiClient.put(`/day-closes/${date}`, payload);
     return data;
   },
+  getOpeningSuggestion: async (
+    date: string,
+  ): Promise<import('@/types').DayOpeningSuggestion> => {
+    const { data } = await apiClient.get(`/day-closes/${date}/opening-suggestion`);
+    return data as import('@/types').DayOpeningSuggestion;
+  },
+  close: async (date: string): Promise<import('@/types').DayCloseRecord> => {
+    const { data } = await apiClient.post(`/day-closes/${date}/close`);
+    return data as import('@/types').DayCloseRecord;
+  },
+  reopen: async (date: string): Promise<import('@/types').DayCloseRecord> => {
+    const { data } = await apiClient.post(`/day-closes/${date}/reopen`);
+    return data as import('@/types').DayCloseRecord;
+  },
   postVariance: async (
     date: string,
     wallet: string,
@@ -699,6 +713,40 @@ export const dayCloseService = {
     if (useMock()) return mockApi.postDayCloseVariance(date, wallet);
     const { data } = await apiClient.post(`/day-closes/${date}/post-variance`, { wallet });
     return data as import('@/types').WalletLedgerEntry;
+  },
+};
+
+export const cashCustodyService = {
+  list: async (params?: {
+    status?: string;
+    heldByUserId?: string;
+  }): Promise<import('@/types').CashCustody[]> => {
+    const { data } = await apiClient.get('/cash-custodies', { params });
+    return ensureArray(data) as import('@/types').CashCustody[];
+  },
+  summary: async (): Promise<import('@/types').CashCustodySummary> => {
+    const { data } = await apiClient.get('/cash-custodies/summary');
+    return data as import('@/types').CashCustodySummary;
+  },
+  take: async (
+    payload: import('@/types').CashCustodyTakePayload,
+  ): Promise<import('@/types').CashCustody> => {
+    const { data } = await apiClient.post('/cash-custodies', payload);
+    return data as import('@/types').CashCustody;
+  },
+  returnToTill: async (
+    id: string,
+    payload: import('@/types').CashCustodyReturnPayload,
+  ): Promise<import('@/types').CashCustody> => {
+    const { data } = await apiClient.post(`/cash-custodies/${id}/return`, payload);
+    return data as import('@/types').CashCustody;
+  },
+  deposit: async (
+    id: string,
+    payload: import('@/types').CashCustodyDepositPayload,
+  ): Promise<import('@/types').CashCustody> => {
+    const { data } = await apiClient.post(`/cash-custodies/${id}/deposit`, payload);
+    return data as import('@/types').CashCustody;
   },
 };
 
@@ -896,6 +944,7 @@ export const walletService = {
     wallet?: string;
     dateFrom?: string;
     dateTo?: string;
+    entryType?: string;
     limit?: number;
   }): Promise<import('@/types').WalletLedgerEntry[]> => {
     const { data } = await apiClient.get('/wallets/ledger', { params });

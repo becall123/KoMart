@@ -191,6 +191,7 @@ def settings_snapshot(settings: Any) -> dict[str, Any]:
         "calendar_system": getattr(settings, "calendar_system", "BS"),
         "fiscal_year_start_month": getattr(settings, "fiscal_year_start_month", 7),
         "fiscal_year_start_day": getattr(settings, "fiscal_year_start_day", 16),
+        "opening_cash_balance": float(getattr(settings, "opening_cash_balance", 0) or 0),
         "opening_bank_balance": float(getattr(settings, "opening_bank_balance", 0) or 0),
         "opening_esewa_balance": float(getattr(settings, "opening_esewa_balance", 0) or 0),
     }
@@ -225,6 +226,69 @@ def expense_snapshot(expense: Any) -> dict[str, Any]:
         "bill_no": getattr(expense, "bill_no", None) or "",
         "is_setup_cost": bool(getattr(expense, "is_setup_cost", False)),
         "purchase_order_id": getattr(expense, "purchase_order_id", None) or "",
+    }
+
+
+def day_close_snapshot(doc: Any) -> dict[str, Any]:
+    status_raw = getattr(doc, "status", None) or "open"
+    status_val = status_raw.value if hasattr(status_raw, "value") else str(status_raw)
+    return {
+        "date": getattr(doc, "date", ""),
+        "opening_cash": round(float(getattr(doc, "opening_cash", 0) or 0), 2),
+        "closing_cash": round(float(getattr(doc, "closing_cash", 0) or 0), 2),
+        "closing_bank": getattr(doc, "closing_bank", None),
+        "closing_esewa": getattr(doc, "closing_esewa", None),
+        "status": status_val,
+        "notes": (getattr(doc, "notes", "") or "")[:200],
+    }
+
+
+def cash_custody_snapshot(doc: Any) -> dict[str, Any]:
+    status_raw = getattr(doc, "status", None) or "held"
+    status_val = status_raw.value if hasattr(status_raw, "value") else str(status_raw)
+    return {
+        "amount": round(float(getattr(doc, "amount", 0) or 0), 2),
+        "held_by_name": getattr(doc, "held_by_name", "") or "",
+        "held_by_user_id": getattr(doc, "held_by_user_id", "") or "",
+        "status": status_val,
+        "taken_date": getattr(doc, "taken_date", "") or "",
+        "resolved_date": getattr(doc, "resolved_date", None),
+        "deposit_wallet": getattr(doc, "deposit_wallet", None),
+        "remarks": (getattr(doc, "remarks", "") or "")[:200],
+    }
+
+
+def wallet_transfer_snapshot(
+    *,
+    from_wallet: str,
+    to_wallet: str,
+    amount: float,
+    date: str,
+    remarks: str,
+) -> dict[str, Any]:
+    return {
+        "from_wallet": from_wallet,
+        "to_wallet": to_wallet,
+        "amount": round(float(amount), 2),
+        "date": date,
+        "remarks": (remarks or "")[:200],
+    }
+
+
+def wallet_adjustment_snapshot(
+    *,
+    wallet: str,
+    amount: float,
+    direction: str,
+    date: str,
+    remarks: str,
+) -> dict[str, Any]:
+    return {
+        "wallet": wallet,
+        "amount": round(float(amount), 2),
+        "direction": direction,
+        "date": date,
+        "remarks": (remarks or "")[:200],
     }
 
 

@@ -29,6 +29,7 @@ from app.routers import (
     discounts,
     day_closes,
     wallets,
+    cash_custody,
 )
 
 
@@ -88,6 +89,7 @@ app.include_router(audit_logs.router, prefix=API_PREFIX)
 app.include_router(discounts.router, prefix=API_PREFIX)
 app.include_router(day_closes.router, prefix=API_PREFIX)
 app.include_router(wallets.router, prefix=API_PREFIX)
+app.include_router(cash_custody.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

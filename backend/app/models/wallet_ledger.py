@@ -26,6 +26,7 @@ class WalletEntryType(str, Enum):
     po_payment = "po_payment"
     transfer = "transfer"
     adjustment = "adjustment"
+    custody = "custody"
     opening = "opening"
     void_reversal = "void_reversal"
 

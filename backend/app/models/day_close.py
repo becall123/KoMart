@@ -3,8 +3,14 @@
 from beanie import Document
 from pydantic import Field
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Literal
+from enum import Enum
 from pymongo import IndexModel, ASCENDING
+
+
+class DayCloseStatus(str, Enum):
+    open = "open"
+    closed = "closed"
 
 
 class DayClose(Document):
@@ -15,6 +21,9 @@ class DayClose(Document):
     closing_bank: Optional[float] = Field(default=None, ge=0)
     closing_esewa: Optional[float] = Field(default=None, ge=0)
     notes: str = ""
+    status: DayCloseStatus = DayCloseStatus.open
+    closed_at: Optional[datetime] = None
+    closed_by: str = ""
     created_by: str = ""
     updated_by: str = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
