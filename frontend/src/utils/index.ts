@@ -139,8 +139,19 @@ export function formatExpiryDate(date: string | Date): string {
   return formatDisplayDate(date, 'AD');
 }
 
+/** Parse API datetimes; timezone-less ISO is treated as UTC (Mongo/Beanie naive). */
+export function parseApiDateTime(date: string | Date): Date {
+  if (date instanceof Date) return date;
+  const raw = String(date).trim();
+  // YYYY-MM-DDTHH:mm:ss(.sss)? with no Z or ±offset → assume UTC
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(raw)) {
+    return new Date(`${raw}Z`);
+  }
+  return new Date(raw);
+}
+
 export function formatDateTime(date: string | Date): string {
-  return new Date(date).toLocaleString('en-US', {
+  return parseApiDateTime(date).toLocaleString('en-US', {
     timeZone: 'Asia/Kathmandu',
     year: 'numeric',
     month: 'short',

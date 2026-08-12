@@ -18,7 +18,14 @@ from app.models.user import User, UserRole
 from app.schemas.transaction import TransactionCreate, TransactionItem
 from app.services.sales import record_sale
 from app.services.stock import receive_stock
-from app.services.time_nepal import NPT, resolve_sale_created_at
+from app.services.time_nepal import (
+    NPT,
+    ensure_utc,
+    npt_day_end_utc,
+    npt_day_start_utc,
+    resolve_sale_created_at,
+    to_utc_iso,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -87,9 +94,12 @@ def test_resolve_sale_created_at_date_only_keeps_npt_clock():
 
     local = created.astimezone(NPT)
     assert local.date().isoformat() == "2026-08-09"
-    # Not midnight UTC payload — wall clock should be near "now" in NPT
+    # Not midnight — wall clock should match current NPT clock (date differs)
     assert not (local.hour == 0 and local.minute == 0 and local.second == 0)
-    assert before.replace(microsecond=0) <= local.replace(microsecond=0) <= after.replace(microsecond=0)
+    before_secs = before.hour * 3600 + before.minute * 60 + before.second
+    after_secs = after.hour * 3600 + after.minute * 60 + after.second
+    local_secs = local.hour * 3600 + local.minute * 60 + local.second
+    assert before_secs <= local_secs <= after_secs or after_secs < before_secs  # midnight wrap
 
 
 def test_resolve_sale_created_at_none_is_now_utc():
@@ -97,6 +107,31 @@ def test_resolve_sale_created_at_none_is_now_utc():
     created = resolve_sale_created_at(None)
     after = datetime.now(timezone.utc)
     assert before <= created <= after
+
+
+def test_ensure_utc_naive_assumed_utc():
+    naive = datetime(2026, 8, 9, 12, 30, 0)
+    got = ensure_utc(naive)
+    assert got.tzinfo is not None
+    assert got.hour == 12 and got.minute == 30
+    assert got.utcoffset() == timezone.utc.utcoffset(got)
+
+
+def test_to_utc_iso_uses_z_suffix():
+    aware = datetime(2026, 8, 9, 12, 30, 0, tzinfo=timezone.utc)
+    assert to_utc_iso(aware) == "2026-08-09T12:30:00Z"
+    naive = datetime(2026, 8, 9, 12, 30, 0)
+    assert to_utc_iso(naive) == "2026-08-09T12:30:00Z"
+
+
+def test_npt_day_bounds_cover_full_nepal_calendar_day():
+    start = npt_day_start_utc("2026-08-09")
+    end = npt_day_end_utc("2026-08-09")
+    assert start.astimezone(NPT).isoformat().startswith("2026-08-09T00:00:00")
+    assert end.astimezone(NPT).date().isoformat() == "2026-08-09"
+    # Asia/Kathmandu is UTC+5:45 → 00:00 NPT = 18:15 UTC previous day
+    assert start == datetime(2026, 8, 8, 18, 15, 0, tzinfo=timezone.utc)
+    assert end == datetime(2026, 8, 9, 18, 14, 59, 999999, tzinfo=timezone.utc)
 
 
 @pytest.mark.asyncio
@@ -125,12 +160,19 @@ async def test_record_sale_date_only_preserves_non_midnight_time(
     )
     result = await record_sale(body, cashier_id=str(cashier_user.id))
     try:
+        assert result.created_at.endswith("Z") or "+00:00" in result.created_at
         created = datetime.fromisoformat(result.created_at.replace("Z", "+00:00"))
-        if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
+        assert created.tzinfo is not None
         local = created.astimezone(NPT)
         assert local.date().isoformat() == "2026-08-09"
         assert local.hour != 0 or local.minute != 0 or local.second != 0
+
+        stored = await Transaction.get(result.id)
+        assert stored is not None
+        stored_utc = ensure_utc(stored.created_at)
+        local_stored = stored_utc.astimezone(NPT)
+        assert local_stored.date().isoformat() == "2026-08-09"
+        assert not (local_stored.hour == 0 and local_stored.minute == 0 and local_stored.second == 0)
     finally:
         txn = await Transaction.get(result.id)
         if txn:

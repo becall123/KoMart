@@ -25,7 +25,7 @@ from app.services.stock import (
     restock_from_deductions,
 )
 from app.services.store_settings import get_store_settings
-from app.services.time_nepal import resolve_sale_created_at
+from app.services.time_nepal import ensure_utc, resolve_sale_created_at, to_utc_iso
 from beanie import PydanticObjectId
 
 
@@ -228,7 +228,7 @@ def _to_response(txn: Transaction) -> TransactionResponse:
         notes=getattr(txn, "notes", "") or "",
         created_by=txn.created_by,
         cashier_id=txn.cashier_id,
-        created_at=txn.created_at.isoformat(),
+        created_at=to_utc_iso(txn.created_at),
         total_cost=round(getattr(txn, "total_cost", 0.0) or 0.0, 2),
     )
 
@@ -340,7 +340,7 @@ async def record_sale(
         txn_payload["items"] = enriched_items
         txn_payload["total_cost"] = total_cost
 
-        created_at = resolve_sale_created_at(body.sale_date)
+        created_at = ensure_utc(resolve_sale_created_at(body.sale_date))
 
         txn = Transaction(
             transaction_number=txn_number,

@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from math import ceil
-from datetime import datetime, timezone
 from typing import Optional
 
 from app.auth.dependencies import get_current_user, require_manager_or_above, require_admin_only
@@ -27,6 +26,7 @@ from app.services.sales_backfill import (
     post_backfill_variance,
     validate_backfill_sales,
 )
+from app.services.time_nepal import npt_day_end_utc, npt_day_start_utc
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -50,15 +50,22 @@ async def list_transactions(
     if payment_method:
         filters["payment_method"] = payment_method
     if start_date:
-        start = datetime.fromisoformat(start_date)
-        if start.tzinfo is None:
-            start = start.replace(tzinfo=timezone.utc)
+        try:
+            start = npt_day_start_utc(start_date[:10])
+        except ValueError as exc:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="start_date must be YYYY-MM-DD",
+            ) from exc
         filters.setdefault("created_at", {})["$gte"] = start
     if end_date:
-        end = datetime.fromisoformat(end_date)
-        if end.tzinfo is None:
-            end = end.replace(tzinfo=timezone.utc)
-        end = end.replace(hour=23, minute=59, second=59)
+        try:
+            end = npt_day_end_utc(end_date[:10])
+        except ValueError as exc:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="end_date must be YYYY-MM-DD",
+            ) from exc
         filters.setdefault("created_at", {})["$lte"] = end
 
     query = Transaction.find(filters) if filters else Transaction.find()
