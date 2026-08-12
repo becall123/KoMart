@@ -296,12 +296,26 @@ def sale_snapshot(txn: Any) -> dict[str, Any]:
     return {
         "id": str(txn.id),
         "transaction_number": txn.transaction_number,
-        "total": txn.total,
-        "subtotal": txn.subtotal,
-        "discount": txn.discount,
-        "tax": txn.tax,
-        "payment_method": txn.payment_method.value if hasattr(txn.payment_method, "value") else str(txn.payment_method),
-        "item_count": len(txn.items),
         "customer_id": txn.customer_id or "",
         "customer_name": txn.customer_name or "",
+        "subtotal": txn.subtotal,
+        "tax": txn.tax,
+        "discount": txn.discount,
+        "promotion_discount": getattr(txn, "promotion_discount", 0.0) or 0.0,
+        "manual_discount": getattr(txn, "manual_discount", 0.0) or 0.0,
+        "loyalty_points_redeemed": txn.loyalty_points_redeemed,
+        "round_off": getattr(txn, "round_off", 0.0) or 0.0,
+        "total": txn.total,
+        "payment_method": txn.payment_method.value if hasattr(txn.payment_method, "value") else str(txn.payment_method),
+        "item_count": len(txn.items),
+        "items": [
+            {
+                "product_id": i.product_id,
+                "quantity": i.quantity,
+                "price": i.price,
+                "discount": i.discount,
+            }
+            for i in txn.items
+        ],
+        "notes": getattr(txn, "notes", "") or "",
     }

@@ -49,13 +49,24 @@ class TransactionResponse(BaseModel):
     created_at: str
 
 
+class TransactionItemUpdate(BaseModel):
+    product_id: str
+    quantity: int = Field(ge=0)
+    unit_price: Optional[float] = Field(None, ge=0)
+    line_discount: float = Field(default=0.0, ge=0)
+
+
 class TransactionUpdate(BaseModel):
     customer_id: Optional[str] = None
     customer_name: Optional[str] = None
     payment_method: Optional[PaymentMethod] = None
-    discount: Optional[float] = Field(None, ge=0)
-    loyalty_points_redeemed: Optional[int] = Field(None, ge=0)
     notes: Optional[str] = Field(None, max_length=500)
+    manual_discount: Optional[float] = Field(None, ge=0)
+    loyalty_points_redeemed: Optional[int] = Field(None, ge=0)
+    tax: Optional[float] = Field(None, ge=0)
+    round_off: Optional[float] = Field(None)
+    items: Optional[list[TransactionItemUpdate]] = None
+    expected_version: Optional[int] = Field(None, ge=1)
 
 
 class TransactionVoidRequest(BaseModel):

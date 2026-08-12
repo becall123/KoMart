@@ -6,7 +6,7 @@ import type {
   BackfillSalesRequestPayload,
   BackfillVariancePayload,
   ListQueryParams,
-  PaymentMethod,
+  TransactionUpdatePayload,
 } from '@/types';
 import { invalidateCommerceQueries } from '@/hooks/invalidateCommerce';
 
@@ -61,12 +61,7 @@ export function useUpdateTransaction() {
       ...payload
     }: {
       id: string;
-      customerId?: string | null;
-      customerName?: string;
-      paymentMethod?: PaymentMethod;
-      discount?: number;
-      loyaltyPointsRedeemed?: number;
-    }) => transactionService.update(id, payload),
+    } & TransactionUpdatePayload) => transactionService.update(id, payload),
     onSuccess: (_, { id }) => {
       void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.transaction(id) });
       invalidateCommerceQueries(queryClient, { scopes: ['sale'] });

@@ -25,13 +25,13 @@ import type {
   PurchaseOrderWritePayload,
   Customer,
   Transaction,
+  TransactionUpdatePayload,
   BackfillSaleLinePayload,
   BackfillSalesRequestPayload,
   BackfillSalesResponse,
   BackfillValidateResponse,
   BackfillVariancePayload,
   BackfillVarianceResponse,
-  PaymentMethod,
   AppNotification,
   NotificationType,
   DashboardStats,
@@ -487,13 +487,7 @@ export const transactionService = {
   },
   update: async (
     id: string,
-    payload: {
-      customerId?: string | null;
-      customerName?: string;
-      paymentMethod?: PaymentMethod;
-      discount?: number;
-      loyaltyPointsRedeemed?: number;
-    },
+    payload: TransactionUpdatePayload,
   ): Promise<Transaction> => {
     if (useMock()) {
       const { customerId, ...rest } = payload;
