@@ -10,6 +10,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
     page: int
     page_size: int
     total_pages: int
+    total_amount: float = 0.0
 
 
 class MessageResponse(BaseModel):

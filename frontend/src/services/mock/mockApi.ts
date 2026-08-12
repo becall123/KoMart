@@ -862,8 +862,33 @@ export const mockApi = {
       filtered = filtered.filter((t) => new Date(t.createdAt).getTime() <= end.getTime());
     }
 
-    filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return paginate(filtered, params);
+    if (params.sortBy) {
+      const sortKeyMap: Record<string, keyof Transaction> = {
+        transaction_number: 'transactionNumber',
+        customer_name: 'customerName',
+        total: 'total',
+        discount: 'discount',
+        payment_method: 'paymentMethod',
+        created_by: 'createdBy',
+        created_at: 'createdAt',
+      };
+      const key = sortKeyMap[params.sortBy as string] ?? 'createdAt';
+      const order = params.sortOrder === 'asc' ? 1 : -1;
+      filtered.sort((a, b) => {
+        const av = a[key];
+        const bv = b[key];
+        if (av == null || bv == null) return 0;
+        if (av < bv) return -1 * order;
+        if (av > bv) return 1 * order;
+        return 0;
+      });
+    } else {
+      filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+
+    const totalAmount = Math.round(filtered.reduce((sum, t) => sum + (t.total ?? 0), 0) * 100) / 100;
+    const paginated = paginate(filtered, params);
+    return { ...paginated, totalAmount };
   },
 
   async getTransaction(id: string): Promise<Transaction> {

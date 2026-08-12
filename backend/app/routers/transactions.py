@@ -30,6 +30,16 @@ from app.services.time_nepal import npt_day_end_utc, npt_day_start_utc
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
+ALLOWED_SORT_FIELDS = {
+    "transaction_number",
+    "customer_name",
+    "total",
+    "discount",
+    "payment_method",
+    "created_by",
+    "created_at",
+}
+
 
 @router.get("", response_model=PaginatedResponse[TransactionResponse])
 async def list_transactions(
@@ -39,6 +49,8 @@ async def list_transactions(
     payment_method: Optional[PaymentMethod] = Query(None),
     start_date: str = Query(""),
     end_date: str = Query(""),
+    sort_by: str = Query("", pattern=f"^(|{'|'.join(sorted(ALLOWED_SORT_FIELDS))})$"),
+    sort_order: str = Query("desc", pattern="^(|asc|desc)$"),
     current_user: User = Depends(get_current_user),
 ):
     filters: dict = {}
@@ -77,8 +89,16 @@ async def list_transactions(
         ]})
 
     total = await query.count()
+    total_amount = await query.sum("total") or 0.0
+
+    if sort_by and sort_by in ALLOWED_SORT_FIELDS:
+        direction = 1 if sort_order == "asc" else -1
+        query = query.sort([(sort_by, direction)])
+    else:
+        query = query.sort([("created_at", -1), ("_id", -1)])
+
     txns = (
-        await query.sort([("created_at", -1), ("_id", -1)])
+        await query
         .skip((page - 1) * page_size)
         .limit(page_size)
         .to_list()
@@ -89,6 +109,7 @@ async def list_transactions(
         page=page,
         page_size=page_size,
         total_pages=ceil(total / page_size) if total else 1,
+        total_amount=round(total_amount, 2),
     )
 
 

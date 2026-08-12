@@ -3,19 +3,51 @@ import { Link as RouterLink } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
 interface PageHeaderProps {
-  /** Kept for call-site compatibility; TopBar usually shows the page title. */
   title?: string;
-  /** Optional supporting line under breadcrumbs / beside actions. */
   subtitle?: string;
+  subtitleEnd?: ReactNode;
+  subtitleEndLabel?: string;
   breadcrumbs?: { label: string; path?: string }[];
   action?: ReactNode;
 }
 
-export function PageHeader({ breadcrumbs, action, subtitle }: PageHeaderProps) {
+export function PageHeader({ breadcrumbs, action, subtitle, subtitleEnd, subtitleEndLabel }: PageHeaderProps) {
   const hasBreadcrumbs = Boolean(breadcrumbs && breadcrumbs.length > 0);
-  if (!hasBreadcrumbs && !action && !subtitle) {
+  if (!hasBreadcrumbs && !action && !subtitle && !subtitleEnd && !subtitleEndLabel) {
     return null;
   }
+
+  const renderSubtitleEnd = () => {
+    if (!subtitleEnd && !subtitleEndLabel) return null;
+    const content = subtitleEndLabel ? (
+      <Box
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'baseline',
+          gap: 0.5,
+          px: 1.5,
+          py: 0.5,
+          borderRadius: 1,
+          bgcolor: 'primary.main',
+          color: 'primary.contrastText',
+        }}
+      >
+        {subtitleEndLabel && (
+          <Typography variant="body2" sx={{ fontWeight: 500, opacity: 0.9 }}>
+            {subtitleEndLabel}
+          </Typography>
+        )}
+        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+          {subtitleEnd}
+        </Typography>
+      </Box>
+    ) : (
+      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', whiteSpace: 'nowrap', flexShrink: 0 }}>
+        {subtitleEnd}
+      </Typography>
+    );
+    return content;
+  };
 
   return (
     <Box
@@ -25,7 +57,7 @@ export function PageHeader({ breadcrumbs, action, subtitle }: PageHeaderProps) {
         alignItems: { sm: 'center' },
         justifyContent: 'space-between',
         gap: 1.5,
-        mb: action || hasBreadcrumbs || subtitle ? 2 : 0,
+        mb: action || hasBreadcrumbs || subtitle || subtitleEnd || subtitleEndLabel ? 2 : 0,
       }}
     >
       <Box>
@@ -52,13 +84,16 @@ export function PageHeader({ breadcrumbs, action, subtitle }: PageHeaderProps) {
           </Breadcrumbs>
         )}
         {subtitle ? (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ mt: hasBreadcrumbs ? 0.5 : 0 }}
-          >
-            {subtitle}
-          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, mt: hasBreadcrumbs ? 0.5 : 0 }}>
+            <Typography variant="body2" color="text.secondary">
+              {subtitle}
+            </Typography>
+            {renderSubtitleEnd()}
+          </Box>
+        ) : renderSubtitleEnd() ? (
+          <Box sx={{ mt: hasBreadcrumbs ? 0.5 : 0, textAlign: 'right' }}>
+            {renderSubtitleEnd()}
+          </Box>
         ) : null}
       </Box>
       {action && <Box sx={{ flexShrink: 0 }}>{action}</Box>}

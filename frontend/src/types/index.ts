@@ -705,6 +705,7 @@ export interface PaginatedResponse<T> {
   page: number;
   pageSize: number;
   totalPages: number;
+  totalAmount?: number;
 }
 
 /** Inventory list includes filtered stock×cost total for the Value footer. */

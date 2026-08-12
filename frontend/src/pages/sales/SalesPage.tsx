@@ -24,6 +24,18 @@ export function SalesPage() {
     startDate: dayjs().subtract(30, 'day').format('YYYY-MM-DD'),
     endDate: dayjs().format('YYYY-MM-DD'),
   });
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const SORT_KEY_MAP: Record<string, string> = {
+    transactionNumber: 'transaction_number',
+    customerName: 'customer_name',
+    total: 'total',
+    discount: 'discount',
+    paymentMethod: 'payment_method',
+    createdBy: 'created_by',
+    createdAt: 'created_at',
+  };
 
   const { data, isLoading } = useTransactions({
     search,
@@ -32,17 +44,31 @@ export function SalesPage() {
     paymentMethod: paymentMethod || undefined,
     startDate: dateRange.startDate,
     endDate: dateRange.endDate,
+    sortBy: sortBy ? SORT_KEY_MAP[sortBy] : undefined,
+    sortOrder,
   });
 
+  const handleSort = (key: string) => {
+    if (sortBy === key) {
+      setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(key);
+      setSortOrder('desc');
+    }
+    setPage(0);
+  };
+
   const columns: Column<Transaction>[] = [
-    { id: 'number', label: 'Bill No', minWidth: 160, accessor: 'transactionNumber' },
-    { id: 'customer', label: 'Customer', render: (r) => r.customerName ?? 'Walk-In' },
+    { id: 'number', label: 'Bill No', minWidth: 160, accessor: 'transactionNumber', sortable: true, sortKey: 'transactionNumber' },
+    { id: 'customer', label: 'Customer', render: (r) => r.customerName ?? 'Walk-In', sortable: true, sortKey: 'customerName' },
     { id: 'items', label: 'Items', align: 'right', render: (r) => r.items.length },
     {
       id: 'total',
       label: 'Total',
       align: 'right',
       render: (r) => formatCurrency(r.total),
+      sortable: true,
+      sortKey: 'total',
     },
     {
       id: 'discount',
@@ -56,17 +82,23 @@ export function SalesPage() {
           </Typography>
         ) : '—';
       },
+      sortable: true,
+      sortKey: 'discount',
     },
     {
       id: 'payment',
       label: 'Payment',
       render: (r) => r.paymentMethod.toUpperCase(),
+      sortable: true,
+      sortKey: 'paymentMethod',
     },
-    { id: 'cashier', label: 'Cashier', accessor: 'createdBy' },
+    { id: 'cashier', label: 'Cashier', accessor: 'createdBy', sortable: true, sortKey: 'createdBy' },
     {
       id: 'date',
       label: 'Date',
       render: (r) => formatDateTime(r.createdAt),
+      sortable: true,
+      sortKey: 'createdAt',
     },
   ];
 
@@ -75,6 +107,8 @@ export function SalesPage() {
       <PageHeader
         title="Sales"
         subtitle={`${data?.total ?? 0} transactions`}
+        subtitleEndLabel="Total Amount"
+        subtitleEnd={formatCurrency(data?.totalAmount ?? 0)}
         action={
           isAdmin(user?.role) ? (
             <Button
@@ -123,6 +157,9 @@ export function SalesPage() {
         page={page}
         pageSize={pageSize}
         total={data?.total}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSort={handleSort}
         onPageChange={setPage}
         onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
         onRowClick={(row) => navigate(`/sales/${row.id}`)}
