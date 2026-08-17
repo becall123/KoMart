@@ -23,6 +23,8 @@ from app.services.stock import (
     adjust_stock,
     expiring_product_ids,
     get_batches_for_products,
+    get_current_stock,
+    get_current_stock_batch,
     get_sorted_batches,
     nearest_expiry,
     receive_stock,
@@ -88,8 +90,9 @@ def _batch_response(batch: InventoryBatch) -> BatchResponse:
     )
 
 
-def _item_response(product: Product, batches: list[InventoryBatch]) -> InventoryItemResponse:
+async def _item_response(product: Product, batches: list[InventoryBatch]) -> InventoryItemResponse:
     active_batches = [batch for batch in batches if batch.quantity > 0]
+    stock = sum(b.quantity for b in batches)
     return InventoryItemResponse(
         id=str(product.id),
         name=product.name,
@@ -98,7 +101,7 @@ def _item_response(product: Product, batches: list[InventoryBatch]) -> Inventory
         category=product.category,
         supplier_id=product.supplier_id,
         supplier_name=product.supplier_name,
-        stock=product.stock,
+        stock=stock,
         low_stock_threshold=product.low_stock_threshold,
         cost_price=product.cost_price,
         selling_price=product.selling_price,
@@ -175,23 +178,23 @@ async def list_inventory(
 
     col = Product.get_motor_collection()
     total = await col.count_documents(match)
-    value_rows = await col.aggregate([
-        {"$match": match},
-        {"$group": {
-            "_id": None,
-            "total_stock_value": {"$sum": {"$multiply": ["$stock", "$cost_price"]}},
-        }},
-    ]).to_list(1)
-    total_stock_value = round(float(value_rows[0]["total_stock_value"]), 2) if value_rows else 0.0
-
     products = await Product.find(match).sort("name").skip((page - 1) * page_size).limit(page_size).to_list()
 
     product_ids = [str(product.id) for product in products]
     batches_by_product = await get_batches_for_products(product_ids)
-    items = [
-        _item_response(product, batches_by_product.get(str(product.id), []))
-        for product in products
-    ]
+    stock_map = await get_current_stock_batch(product_ids)
+
+    total_stock_value = 0.0
+    for pid in product_ids:
+        product = next((p for p in products if str(p.id) == pid), None)
+        if product:
+            total_stock_value += stock_map.get(pid, 0) * product.cost_price
+    total_stock_value = round(total_stock_value, 2)
+
+    items = []
+    for product in products:
+        item = await _item_response(product, batches_by_product.get(str(product.id), []))
+        items.append(item)
 
     return InventoryListResponse(
         data=items,
@@ -212,7 +215,7 @@ async def get_inventory_item(
     if not product or not product.is_active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Product not found")
     batches = await get_sorted_batches(product_id)
-    return _item_response(product, batches)
+    return await _item_response(product, batches)
 
 
 @router.post("/batches", response_model=BatchResponse, status_code=status.HTTP_201_CREATED)
@@ -226,7 +229,7 @@ async def receive_batch(
     if not product or not product.is_active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Product not found")
 
-    stock_before = product.stock
+    stock_before = await get_current_stock(body.product_id)
     before_cost = product.cost_price
     before_sell = product.selling_price
     resolved_selling_price = product.selling_price
@@ -263,6 +266,7 @@ async def receive_batch(
     )
 
     refreshed = await Product.get(body.product_id)
+    stock_after = await get_current_stock(body.product_id)
     await log_audit(
         module=AuditModule.inventory,
         action="receive",
@@ -272,7 +276,7 @@ async def receive_batch(
         entity_id=body.product_id,
         previous={"stock": stock_before},
         new={
-            "stock": refreshed.stock if refreshed else stock_before + body.quantity,
+            "stock": stock_after,
             "batch_number": body.batch_number,
             "quantity": body.quantity,
             "batch_id": str(batch.id),
@@ -459,7 +463,7 @@ async def adjust_stock_endpoint(
     current_user: User = Depends(require_manager_or_above),
 ):
     product = await Product.get(body.product_id)
-    stock_before = product.stock if product else 0
+    stock_before = await get_current_stock(body.product_id) if product else 0
 
     new_stock = await adjust_stock(
         body.product_id,

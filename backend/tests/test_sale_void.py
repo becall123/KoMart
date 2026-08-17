@@ -30,7 +30,6 @@ async def test_void_sale_restores_stock():
         supplier_name="Supplier",
         cost_price=10.0,
         selling_price=20.0,
-        stock=5,
         low_stock_threshold=1,
         is_active=True,
     )

@@ -64,7 +64,7 @@ from app.services.reporting import (
     line_revenue,
     parse_date_range,
 )
-from app.services.stock import expiring_product_ids
+from app.services.stock import expiring_product_ids, get_current_stock, get_current_stock_batch
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
@@ -392,43 +392,41 @@ async def low_stock_report(
     product_status: str = Query("", pattern="^(|active|discontinued|seasonal)$"),
     _: User = Depends(require_manager_or_above),
 ):
-    low_expr = {
-        "$and": [
-            {"$gt": ["$stock", 0]},
-            {"$lte": ["$stock", "$low_stock_threshold"]},
-        ],
-    }
-    if stock_filter == "out":
-        query = Product.find(Product.is_active == True, Product.stock == 0)  # noqa: E712
-    elif stock_filter == "low":
-        query = Product.find(Product.is_active == True, {"$expr": low_expr})  # noqa: E712
-    else:
-        query = Product.find(
-            Product.is_active == True,  # noqa: E712
-            {"$or": [{"stock": 0}, {"$expr": low_expr}]},
-        )
-
+    query = Product.find(Product.is_active == True)  # noqa: E712
     if product_status:
         query = query.find(Product.status == ProductStatus(product_status))
 
     total = await query.count()
     products = (
-        await query.sort("+stock")
+        await query.sort("name")
         .skip((page - 1) * page_size)
         .limit(page_size)
         .to_list()
     )
+
+    product_ids = [str(p.id) for p in products]
+    stock_map = await get_current_stock_batch(product_ids)
+
     rows: list[LowStockProductRow] = []
     for product in products:
-        stock_status = "out" if product.stock == 0 else "low"
+        pid = str(product.id)
+        stock = stock_map.get(pid, 0)
+        if stock_filter == "out" and stock != 0:
+            continue
+        elif stock_filter == "low" and (stock == 0 or stock > product.low_stock_threshold):
+            continue
+        elif stock_filter == "both" and stock > product.low_stock_threshold:
+            continue
+
+        stock_status = "out" if stock == 0 else "low"
         prod_status = product.status.value if hasattr(product, "status") and product.status else "active"
         rows.append(
             LowStockProductRow(
-                product_id=str(product.id),
+                product_id=pid,
                 product_name=product.name,
                 sku=product.sku,
                 category=product.category,
-                stock=product.stock,
+                stock=stock,
                 low_stock_threshold=product.low_stock_threshold,
                 status=stock_status,
                 product_status=prod_status,
@@ -729,23 +727,27 @@ async def dead_stock_report(
 
     products = await Product.find(
         Product.is_active == True,  # noqa: E712
-        Product.stock > 0,
     ).to_list()
 
     if product_status:
         products = [p for p in products if p.status.value == product_status]
 
-    dead_pids = [str(p.id) for p in products if str(p.id) not in recently_sold]
+    product_ids = [str(p.id) for p in products]
+    stock_map = await get_current_stock_batch(product_ids)
+    products_with_stock = [p for p in products if stock_map.get(str(p.id), 0) > 0]
+
+    dead_pids = [str(p.id) for p in products_with_stock if str(p.id) not in recently_sold]
     if not dead_pids:
         return []
 
     last_sale = await aggregate_last_sale_before(dead_pids, cutoff)
 
     dead: list[DeadStockProduct] = []
-    for product in products:
+    for product in products_with_stock:
         pid = str(product.id)
         if pid not in dead_pids:
             continue
+        stock = stock_map.get(pid, 0)
         if pid in last_sale:
             actual_days = (now - last_sale[pid]).days
         else:
@@ -756,8 +758,8 @@ async def dead_stock_report(
                 product_name=product.name,
                 sku=product.sku,
                 category=product.category,
-                stock=product.stock,
-                stock_value=round(product.stock * product.cost_price, 2),
+                stock=stock,
+                stock_value=round(stock * product.cost_price, 2),
                 days_without_sale=actual_days,
                 product_status=product.status.value if hasattr(product, "status") and product.status else "active",
             )

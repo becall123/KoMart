@@ -15,6 +15,7 @@ from app.models.purchase_order import POStatus, PurchaseOrder, PurchaseOrderItem
 from app.models.user import User, UserRole
 from app.schemas.purchase_order import PurchaseOrderReceiveItem
 from app.services.po_receive import receive_purchase_order_items
+from app.services.stock import get_current_stock
 
 
 def _mock_request() -> MagicMock:
@@ -60,7 +61,6 @@ async def test_po_receive_converts_packs_to_base_pieces():
         units_per_buy_uom=12,
         cost_price=2.0,
         selling_price=25.0,
-        stock=0,
         is_active=True,
     )
     await product.insert()
@@ -103,7 +103,7 @@ async def test_po_receive_converts_packs_to_base_pieces():
 
     refreshed_product = await Product.get(product.id)
     assert refreshed_product is not None
-    assert refreshed_product.stock == 60
+    assert await get_current_stock(str(product.id)) == 60
 
     batches = await InventoryBatch.find(
         InventoryBatch.purchase_order_id == str(po.id),

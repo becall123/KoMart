@@ -488,6 +488,20 @@ export interface Transaction {
   createdBy: string;
 }
 
+export interface TransactionUpdatePayload {
+  customerId?: string | null;
+  customerName?: string;
+  paymentMethod?: PaymentMethod;
+  discount?: number;
+  manualDiscount?: number;
+  loyaltyPointsRedeemed?: number;
+  tax?: number;
+  roundOff?: number;
+  notes?: string;
+  items?: Array<{ productId: string; quantity: number; unitPrice: number; lineDiscount: number }>;
+  expected_version?: number;
+}
+
 export interface BackfillSaleLinePayload {
   row: number;
   transactionNo: string;

@@ -929,11 +929,30 @@ export const mockApi = {
     return txn;
   },
 
-  async updateTransaction(id: string, payload: Partial<Transaction>): Promise<Transaction> {
+  async updateTransaction(id: string, payload: import('@/types').TransactionUpdatePayload): Promise<Transaction> {
     await delay(400);
     const idx = transactions.findIndex((t) => t.id === id);
     if (idx === -1) throw new Error('Transaction not found');
-    transactions[idx] = { ...transactions[idx], ...payload };
+    const { items, customerId, ...rest } = payload;
+    const updated: Transaction = {
+      ...transactions[idx],
+      ...rest,
+      customerId: customerId ?? transactions[idx].customerId,
+    };
+    if (items) {
+      updated.items = items.map((item, i) => {
+        const existing = transactions[idx].items[i];
+        return {
+          productId: item.productId,
+          name: existing?.name ?? item.productId,
+          sku: existing?.sku ?? item.productId,
+          price: item.unitPrice,
+          quantity: item.quantity,
+          discount: item.lineDiscount,
+        };
+      });
+    }
+    transactions[idx] = updated;
     return transactions[idx];
   },
 

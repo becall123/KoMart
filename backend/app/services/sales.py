@@ -21,6 +21,7 @@ from app.services.stock import (
     BatchDeduction,
     check_stock_available,
     deduct_stock_fefo,
+    get_current_stock,
     record_inventory_change,
     restock_from_deductions,
 )
@@ -282,7 +283,7 @@ async def record_sale(
     try:
         for item in body.items:
             product = product_map[item.product_id]
-            stock_before = product.stock
+            stock_before = await get_current_stock(item.product_id)
             base_qty = _base_quantity(item)
 
             deductions = await deduct_stock_fefo(item.product_id, base_qty)
@@ -398,8 +399,60 @@ async def record_sale(
         raise
 
 
+async def reallocate_batches(txn: Transaction, new_items: list[dict]) -> None:
+    """Reconcile batch allocations when line items are edited."""
+    old_map: dict[str, tuple[int, list[BatchAllocation]]] = {}
+    for item in txn.items:
+        old_map[item.product_id] = (item.quantity, item.batch_allocations)
+
+    new_map: dict[str, int] = {}
+    for item in new_items:
+        new_map[item["product_id"]] = item.get("quantity", 0)
+
+    all_deductions: list[BatchDeduction] = []
+
+    for product_id, new_qty in new_map.items():
+        old_qty, old_allocs = old_map.get(product_id, (0, []))
+        delta = new_qty - old_qty
+        if delta > 0:
+            try:
+                deductions = await deduct_stock_fefo(product_id, delta)
+                all_deductions.extend(deductions)
+            except HTTPException:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    detail=f"Insufficient stock for {product_id}",
+                )
+        elif delta < 0:
+            restock_qty = abs(delta)
+            for alloc in old_allocs:
+                if restock_qty <= 0:
+                    break
+                qty = min(alloc.quantity, restock_qty)
+                all_deductions.append(BatchDeduction(
+                    product_id=product_id,
+                    batch_id=alloc.batch_id,
+                    quantity=-qty,
+                    unit_cost=alloc.unit_cost,
+                ))
+                restock_qty -= qty
+
+    for product_id, (old_qty, _) in old_map.items():
+        if product_id not in new_map and old_qty > 0:
+            for alloc in old_map[product_id][1]:
+                all_deductions.append(BatchDeduction(
+                    product_id=product_id,
+                    batch_id=alloc.batch_id,
+                    quantity=-alloc.quantity,
+                    unit_cost=alloc.unit_cost,
+                ))
+
+    if all_deductions:
+        await restock_from_deductions(all_deductions)
+
+
 async def update_transaction(txn_id: str, body: "TransactionUpdate") -> TransactionResponse:
-    """Update sale metadata (customer, payment, discount). Line items are not changed."""
+    """Update sale metadata (customer, payment, discount, line items, notes)."""
     from app.schemas.transaction import TransactionUpdate as TxnUpdate
     from app.services.wallet_ledger import delete_reference, post_sale
 
@@ -434,6 +487,12 @@ async def update_transaction(txn_id: str, body: "TransactionUpdate") -> Transact
     if "payment_method" in data and data["payment_method"] is not None:
         updates["payment_method"] = data["payment_method"]
 
+    if "notes" in data and data["notes"] is not None:
+        updates["notes"] = data["notes"][:500]
+
+    if "tax" in data and data["tax"] is not None:
+        updates["tax"] = max(0.0, float(data["tax"]))
+
     if "loyalty_points_redeemed" in data and data["loyalty_points_redeemed"] is not None:
         new_loyalty = max(0, int(data["loyalty_points_redeemed"]))
         cid = updates.get("customer_id", txn.customer_id)
@@ -446,7 +505,6 @@ async def update_transaction(txn_id: str, body: "TransactionUpdate") -> Transact
             customer = await Customer.get(cid)
             if not customer:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Customer not found")
-            # Allow keeping existing redeem; block increasing beyond available.
             available = int(customer.loyalty_points or 0) + int(txn.loyalty_points_redeemed or 0)
             if new_loyalty > available:
                 raise HTTPException(
@@ -455,17 +513,67 @@ async def update_transaction(txn_id: str, body: "TransactionUpdate") -> Transact
                 )
         updates["loyalty_points_redeemed"] = new_loyalty
 
+    if "round_off" in data and data["round_off"] is not None:
+        updates["round_off"] = float(data["round_off"])
+
+    effective_items = txn.items
+    if "items" in data and data["items"] is not None:
+        new_items_raw = data["items"]
+        if not isinstance(new_items_raw, list) or len(new_items_raw) == 0:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Items list cannot be empty")
+
+        validated: list[TransactionItem] = []
+        for raw in new_items_raw:
+            pid = raw.get("product_id")
+            qty = int(raw.get("quantity", 0))
+            if not pid or qty < 0:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid item in update")
+            price = float(raw.get("unit_price", 0) or 0)
+            line_disc = float(raw.get("line_discount", 0) or 0)
+            validated.append(TransactionItem(
+                product_id=pid,
+                name=next((i.name for i in txn.items if i.product_id == pid), pid),
+                sku=next((i.sku for i in txn.items if i.product_id == pid), ""),
+                price=max(0.0, price),
+                quantity=max(0, qty),
+                discount=max(0.0, line_disc),
+            ))
+
+        effective_items = validated
+        await reallocate_batches(txn, new_items_raw)
+        updates["items"] = [i.model_dump() for i in validated]
+        updates["subtotal"] = round(sum(i.price * i.quantity for i in validated), 2)
+
     if "discount" in data and data["discount"] is not None:
         discount = float(data["discount"])
-        line_discount = sum(i.discount * i.quantity for i in txn.items)
-        max_discount = txn.subtotal - line_discount
+        line_discount = sum(i.discount * i.quantity for i in effective_items)
+        current_subtotal = updates.get("subtotal", txn.subtotal)
+        max_discount = current_subtotal - line_discount
         if discount > max_discount:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail="Discount cannot exceed subtotal",
             )
+
+        settings = await get_store_settings()
+        redeem_rate = getattr(settings, "loyalty_redeem_rate", 1) or 1
+        loyalty_value = float(txn.loyalty_points_redeemed or 0) * float(redeem_rate)
+
+        if "manual_discount" in data and data["manual_discount"] is not None:
+            manual = max(0.0, min(float(data["manual_discount"]), max_discount))
+            updates["manual_discount"] = manual
+        else:
+            manual = float(txn.manual_discount or 0.0)
+            if manual > max_discount:
+                manual = max_discount
+                updates["manual_discount"] = manual
+
+        promotion = max(0.0, round(discount - manual - loyalty_value, 2))
+        updates["promotion_discount"] = promotion
         updates["discount"] = discount
-        updates["total"] = round(txn.subtotal - line_discount - discount + txn.tax, 2)
+        current_tax = updates.get("tax", txn.tax)
+        current_round_off = updates.get("round_off", txn.round_off)
+        updates["total"] = round(current_subtotal - line_discount - discount + float(current_tax or 0) + float(current_round_off or 0), 2)
 
     if not updates:
         return _to_response(txn)

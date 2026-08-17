@@ -31,6 +31,7 @@ from app.services.product_pricing import compute_product_pricing, apply_pricing_
 from app.services.sku import generate_unique_sku, peek_unique_sku
 from app.services.store_settings import get_store_settings
 from app.services.product_list import to_list_lean
+from app.services.stock import get_current_stock, get_current_stock_batch
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -153,7 +154,9 @@ async def _apply_product_update(
     return update_data
 
 
-def _to_response(p: Product, *, lean: bool = False, include_images: bool = True) -> ProductResponse:
+async def _to_response(p: Product, *, lean: bool = False, include_images: bool = True, stock: int | None = None) -> ProductResponse:
+    if stock is None:
+        stock = await get_current_stock(str(p.id))
     # List endpoints omit long text; optionally keep first image for POS/Products cards.
     if lean:
         images = list(p.images or [])[:1] if include_images else []
@@ -193,7 +196,7 @@ def _to_response(p: Product, *, lean: bool = False, include_images: bool = True)
         images=images,
         nutrition_info=nutrition_info,
         allergen_info=allergen_info,
-        stock=p.stock,
+        stock=stock,
         low_stock_threshold=p.low_stock_threshold,
         status=p.status if hasattr(p, "status") and p.status else ProductStatus.active,
         tags=p.tags if hasattr(p, "tags") and p.tags else [],
@@ -277,11 +280,15 @@ async def list_products(
             limit=page_size,
             include_images=include_images,
         )
-        data = [_to_response(p, lean=True, include_images=include_images) for p in products]
     else:
-        # Full documents for Excel / Bulk Add round-trip (all images + text fields).
         products = await query.skip(skip).limit(page_size).to_list()
-        data = [_to_response(p, lean=False, include_images=True) for p in products]
+
+    product_ids = [str(p.id) for p in products]
+    stock_map = await get_current_stock_batch(product_ids)
+    data = [
+        await _to_response(p, lean=lean, include_images=include_images, stock=stock_map.get(str(p.id), 0))
+        for p in products
+    ]
 
     return PaginatedResponse(
         data=data,
@@ -343,7 +350,6 @@ async def create_product(
         supplier_name = supplier.name
     data = body.model_dump()
     data["sku"] = sku
-    data.pop("stock", None)
     category = data.pop("category", None)
     cat_id, cat_name = await resolve_category_fields(
         category_id=data.pop("category_id", None) or None,
@@ -354,7 +360,6 @@ async def create_product(
         category=cat_name,
         category_id=cat_id,
         supplier_name=supplier_name,
-        stock=0,
     )
     pricing = compute_product_pricing(product)
     for key, value in pricing.items():
@@ -395,7 +400,7 @@ async def create_product(
         entity_id=str(product.id),
         new=product_snapshot(product),
     )
-    return _to_response(product)
+    return await _to_response(product)
 
 
 @router.post("/bulk-create", response_model=ProductBulkCreateResponse)
@@ -450,7 +455,6 @@ async def bulk_create_products(
                 supplier_name = supplier.name
             data = item.model_dump(exclude={"row"})
             data["sku"] = sku
-            data.pop("stock", None)
             category = data.pop("category", None)
             cat_id, cat_name = await resolve_category_fields(
                 category_id=data.pop("category_id", None) or None,
@@ -461,7 +465,6 @@ async def bulk_create_products(
                 category=cat_name,
                 category_id=cat_id,
                 supplier_name=supplier_name,
-                stock=0,
             )
             for key, value in compute_product_pricing(product).items():
                 setattr(product, key, value)
@@ -534,7 +537,7 @@ async def get_product(product_id: str, _: User = Depends(get_current_user)):
     product = await Product.get(product_id)
     if not product:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Product not found")
-    return _to_response(product)
+    return await _to_response(product)
 
 
 @router.patch("/{product_id}", response_model=ProductResponse)
@@ -626,7 +629,7 @@ async def update_product(
         previous=before,
         new=after,
     )
-    return _to_response(refreshed)  # type: ignore[arg-type]
+    return await _to_response(refreshed)  # type: ignore[arg-type]
 
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)

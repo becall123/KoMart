@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.database import init_db  # noqa: E402
 from app.models.inventory import AdjustmentType  # noqa: E402
 from app.models.product import Product  # noqa: E402
-from app.services.stock import adjust_stock, receive_stock  # noqa: E402
+from app.services.stock import adjust_stock, get_current_stock, receive_stock  # noqa: E402
 
 # Reuse workbook parsing from import script
 from scripts.import_products_from_excel import (  # noqa: E402
@@ -99,9 +99,10 @@ async def update_from_excel(
 
         stock_delta: int | None = None
         if target_qty is not None and not skip_stock:
-            stock_delta = target_qty - product.stock
+            current_stock = await get_current_stock(str(product.id))
+            stock_delta = target_qty - current_stock
             if stock_delta != 0:
-                changes.append(f"stock {product.stock} -> {target_qty} (delta {stock_delta:+d})")
+                changes.append(f"stock {current_stock} -> {target_qty} (delta {stock_delta:+d})")
 
         if not changes:
             report.append({

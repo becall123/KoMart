@@ -72,6 +72,7 @@ class Transaction(Document):
     cashier_id: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    version: int = Field(default=1, ge=1)
 
     class Settings:
         name = "transactions"

@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import init_db
-from app.services.stock import refresh_all_product_stocks
 from app.routers import (
     auth,
     catalog,
@@ -36,8 +35,6 @@ from app.routers import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    if not settings.skip_stock_refresh_on_start:
-        await refresh_all_product_stocks()
     yield
 
 

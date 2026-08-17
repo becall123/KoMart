@@ -11,6 +11,7 @@ from app.models.expense import Expense
 from app.models.inventory import InventoryBatch
 from app.models.product import Product
 from app.models.transaction import Transaction, TransactionItem, TransactionStatus
+from app.services.stock import get_current_stock_batch
 
 
 def parse_date_range(start_date: str, end_date: str) -> tuple[datetime, datetime]:
@@ -106,7 +107,6 @@ async def aggregate_sales_by_day(start: datetime, end: datetime) -> dict[str, fl
 async def aggregate_batch_inventory_value() -> float:
     """
     Batch-weighted valuation: sum(qty * unit_cost) per product from active batches.
-    Fallback to product.stock * product.cost_price when a product has no active batches.
     """
     batch_pipeline = [
         {"$match": {"quantity": {"$gt": 0}}},
@@ -118,60 +118,30 @@ async def aggregate_batch_inventory_value() -> float:
         },
     ]
     batch_rows = await InventoryBatch.aggregate(batch_pipeline).to_list()
-    batch_by_product = {row["_id"]: float(row["batch_value"]) for row in batch_rows}
-
-    products = await Product.find(Product.is_active == True).to_list()  # noqa: E712
-    total = 0.0
-    for product in products:
-        pid = str(product.id)
-        batch_value = batch_by_product.get(pid, 0.0)
-        if batch_value > 0:
-            total += batch_value
-        else:
-            total += product.stock * product.cost_price
-    return total
+    return round(sum(float(row["batch_value"]) for row in batch_rows), 2)
 
 
 async def aggregate_product_inventory_stats() -> dict[str, float | int]:
-    pipeline = [
-        {"$match": {"is_active": True}},
-        {
-            "$group": {
-                "_id": None,
-                "total_products": {"$sum": 1},
-                "low_stock": {
-                    "$sum": {
-                        "$cond": [
-                            {
-                                "$and": [
-                                    {"$gt": ["$stock", 0]},
-                                    {"$lte": ["$stock", "$low_stock_threshold"]},
-                                ],
-                            },
-                            1,
-                            0,
-                        ],
-                    },
-                },
-                "out_of_stock": {"$sum": {"$cond": [{"$eq": ["$stock", 0]}, 1, 0]}},
-            },
-        },
-    ]
-    rows = await Product.aggregate(pipeline).to_list()
+    products = await Product.find(Product.is_active == True).to_list()  # noqa: E712
+    product_ids = [str(p.id) for p in products]
+    stock_map = await get_current_stock_batch(product_ids)
+
+    total_products = len(products)
+    low_stock = 0
+    out_of_stock = 0
+    for product in products:
+        stock = stock_map.get(str(product.id), 0)
+        if stock == 0:
+            out_of_stock += 1
+        elif stock <= product.low_stock_threshold:
+            low_stock += 1
+
     inventory_value = await aggregate_batch_inventory_value()
-    if not rows:
-        return {
-            "total_products": 0,
-            "inventory_value": inventory_value,
-            "low_stock": 0,
-            "out_of_stock": 0,
-        }
-    row = rows[0]
     return {
-        "total_products": int(row["total_products"]),
+        "total_products": total_products,
         "inventory_value": inventory_value,
-        "low_stock": int(row["low_stock"]),
-        "out_of_stock": int(row["out_of_stock"]),
+        "low_stock": low_stock,
+        "out_of_stock": out_of_stock,
     }
 
 
@@ -244,19 +214,28 @@ def days_until(expiry: str) -> int:
 
 
 async def aggregate_inventory_by_category() -> list[dict[str, Any]]:
-    pipeline = [
-        {"$match": {"is_active": True}},
-        {
-            "$group": {
-                "_id": "$category",
-                "sku_count": {"$sum": 1},
-                "total_stock": {"$sum": "$stock"},
-                "stock_value": {"$sum": {"$multiply": ["$stock", "$cost_price"]}},
-            },
-        },
-        {"$sort": {"stock_value": -1}},
-    ]
-    return await Product.aggregate(pipeline).to_list()
+    products = await Product.find(Product.is_active == True).to_list()  # noqa: E712
+    product_ids = [str(p.id) for p in products]
+    stock_map = await get_current_stock_batch(product_ids)
+
+    by_category: dict[str, dict[str, Any]] = {}
+    for product in products:
+        pid = str(product.id)
+        stock = stock_map.get(pid, 0)
+        cat = product.category or "Uncategorized"
+        entry = by_category.setdefault(cat, {
+            "category": cat,
+            "sku_count": 0,
+            "total_stock": 0,
+            "stock_value": 0.0,
+        })
+        entry["sku_count"] += 1
+        entry["total_stock"] += stock
+        entry["stock_value"] += stock * product.cost_price
+
+    result = list(by_category.values())
+    result.sort(key=lambda x: x["stock_value"], reverse=True)
+    return result
 
 
 def fill_daily_revenue(

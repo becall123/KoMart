@@ -237,6 +237,13 @@ async def patch_transaction(
     if not txn:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Transaction not found")
 
+    expected = body.expected_version
+    if expected is not None and txn.version != expected:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"Transaction was modified by another user. Current version: {txn.version}",
+        )
+
     before = sale_snapshot(_to_response(txn))
     result = await update_transaction(txn_id, body)
     await log_audit(

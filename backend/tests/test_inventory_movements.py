@@ -54,7 +54,6 @@ async def sample_movement(manager_user: User):
         supplier_name="Supplier",
         cost_price=10.0,
         selling_price=20.0,
-        stock=5,
         is_active=True,
     )
     await product.insert()

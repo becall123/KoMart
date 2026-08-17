@@ -59,7 +59,6 @@ async def cost_product():
         supplier_name="Supplier",
         cost_price=80.0,
         selling_price=120.0,
-        stock=0,
         low_stock_threshold=5,
         status=ProductStatus.active,
         is_active=True,
