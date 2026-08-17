@@ -18,7 +18,7 @@ export interface Column<T> {
   label: string;
   minWidth?: number;
   align?: 'left' | 'right' | 'center';
-  render?: (row: T) => ReactNode;
+  render?: (row: T, index: number) => ReactNode;
   accessor?: keyof T;
   sortable?: boolean;
   sortKey?: string;
@@ -36,6 +36,7 @@ interface DataTableProps<T> {
   emptyMessage?: string;
   getRowId: (row: T) => string;
   onRowClick?: (row: T) => void;
+  onRowDoubleClick?: (row: T) => void;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
   onSort?: (sortKey: string) => void;
@@ -53,14 +54,15 @@ export function DataTable<T>({
   emptyMessage = 'No data found',
   getRowId,
   onRowClick,
+  onRowDoubleClick,
   sortBy,
   sortOrder = 'asc',
   onSort,
 }: DataTableProps<T>) {
   return (
-    <Paper variant="outlined" sx={{ width: '100%', overflow: 'hidden' }}>
-      <TableContainer sx={{ maxHeight: 600 }}>
-        <Table stickyHeader size="small">
+    <Paper variant="outlined" sx={{ width: '100%', overflow: 'hidden', border: 1, borderColor: 'divider', borderRadius: 1 }}>
+      <TableContainer sx={{ maxHeight: 600, borderTop: 1, borderColor: 'divider' }}>
+        <Table stickyHeader size="small" sx={{ borderCollapse: 'separate', borderSpacing: 0 }}>
           <TableHead>
             <TableRow>
               {columns.map((col) => (
@@ -68,7 +70,7 @@ export function DataTable<T>({
                   key={col.id}
                   align={col.align ?? 'left'}
                   sortDirection={col.sortable && sortBy === col.sortKey ? sortOrder : false}
-                  sx={{ minWidth: col.minWidth, fontWeight: 600 }}
+                  sx={{ minWidth: col.minWidth, fontWeight: 600, borderBottom: '1px solid', borderColor: 'divider' }}
                 >
                   {col.sortable && col.sortKey && onSort ? (
                     <TableSortLabel
@@ -99,17 +101,23 @@ export function DataTable<T>({
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map((row) => (
+              rows.map((row, rowIndex) => (
                 <TableRow
                   key={getRowId(row)}
                   hover
                   onClick={() => onRowClick?.(row)}
-                  sx={{ cursor: onRowClick ? 'pointer' : 'default' }}
+                  onDoubleClick={() => onRowDoubleClick?.(row)}
+                  sx={{
+                    cursor: onRowClick ? 'pointer' : 'default',
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                    '&:nth-of-type(even)': { backgroundColor: 'rgba(0, 0, 0, 0.02)' },
+                  }}
                 >
                   {columns.map((col) => (
-                    <TableCell key={col.id} align={col.align ?? 'left'}>
+                    <TableCell key={col.id} align={col.align ?? 'left'} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
                       {col.render
-                        ? col.render(row)
+                        ? col.render(row, rowIndex + page * pageSize)
                         : col.accessor
                           ? String(row[col.accessor] ?? '')
                           : null}

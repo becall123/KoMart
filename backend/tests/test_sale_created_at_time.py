@@ -13,7 +13,7 @@ from app.database import init_db
 from app.main import app
 from app.models.inventory import InventoryBatch, StockAdjustment
 from app.models.product import Product, ProductStatus
-from app.models.transaction import PaymentMethod, Transaction
+from app.models.transaction import PaymentMethod, Transaction, TransactionStatus
 from app.models.user import User, UserRole
 from app.schemas.transaction import TransactionCreate, TransactionItem
 from app.services.sales import record_sale
@@ -239,3 +239,77 @@ async def test_list_transactions_newest_first(
                 for adj in await StockAdjustment.find(StockAdjustment.transaction_id == txn_id).to_list():
                     await adj.delete()
                 await txn.delete()
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_filters_by_status(
+    client: AsyncClient,
+    cashier_user: User,
+    timed_product: Product,
+):
+    async def _login() -> str:
+        res = await client.post(
+            "/api/v1/auth/login",
+            json={"email": cashier_user.email, "password": "cashierpass123"},
+        )
+        assert res.status_code == 200
+        return res.json()["access_token"]
+
+    completed_txn = Transaction(
+        transaction_number=f"STATUS-COMP-{uuid.uuid4().hex[:8]}",
+        items=[
+            TransactionItem(
+                product_id=str(timed_product.id),
+                name=timed_product.name,
+                sku=timed_product.sku,
+                price=100.0,
+                quantity=1,
+                discount=0.0,
+            )
+        ],
+        subtotal=100.0,
+        tax=0.0,
+        total=100.0,
+        payment_method=PaymentMethod.cash,
+        created_by=cashier_user.name,
+        cashier_id=str(cashier_user.id),
+        status=TransactionStatus.completed,
+    )
+    voided_txn = Transaction(
+        transaction_number=f"STATUS-VOID-{uuid.uuid4().hex[:8]}",
+        items=[
+            TransactionItem(
+                product_id=str(timed_product.id),
+                name=timed_product.name,
+                sku=timed_product.sku,
+                price=50.0,
+                quantity=1,
+                discount=0.0,
+            )
+        ],
+        subtotal=50.0,
+        tax=0.0,
+        total=50.0,
+        payment_method=PaymentMethod.cash,
+        created_by=cashier_user.name,
+        cashier_id=str(cashier_user.id),
+        status=TransactionStatus.voided,
+    )
+
+    await completed_txn.insert()
+    await voided_txn.insert()
+
+    try:
+        token = await _login()
+        res = await client.get(
+            "/api/v1/transactions",
+            params={"page": 1, "page_size": 50, "status": "voided"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert res.status_code == 200, res.text
+        ids = {row["id"] for row in res.json()["data"]}
+        assert str(voided_txn.id) in ids
+        assert str(completed_txn.id) not in ids
+    finally:
+        await completed_txn.delete()
+        await voided_txn.delete()

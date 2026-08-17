@@ -4,7 +4,7 @@ from typing import Optional
 
 from app.auth.dependencies import get_current_user, require_manager_or_above, require_admin_only
 from app.models.user import User, UserRole
-from app.models.transaction import Transaction, PaymentMethod
+from app.models.transaction import Transaction, PaymentMethod, TransactionStatus
 from app.schemas.transaction import (
     TransactionCreate,
     TransactionResponse,
@@ -47,6 +47,7 @@ async def list_transactions(
     page_size: int = Query(10, ge=1, le=500),
     search: str = Query(""),
     payment_method: Optional[PaymentMethod] = Query(None),
+    status: Optional[TransactionStatus] = Query(None),
     start_date: str = Query(""),
     end_date: str = Query(""),
     sort_by: str = Query("", pattern=f"^(|{'|'.join(sorted(ALLOWED_SORT_FIELDS))})$"),
@@ -61,6 +62,8 @@ async def list_transactions(
 
     if payment_method:
         filters["payment_method"] = payment_method
+    if status:
+        filters["status"] = status
     if start_date:
         try:
             start = npt_day_start_utc(start_date[:10])
