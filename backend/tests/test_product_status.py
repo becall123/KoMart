@@ -54,7 +54,6 @@ async def status_products(manager_user: User):
             supplier_name="Supplier",
             cost_price=10.0,
             selling_price=20.0,
-            stock=10,
             status=ProductStatus.active,
             is_active=True,
         ),
@@ -69,7 +68,6 @@ async def status_products(manager_user: User):
             supplier_name="Supplier",
             cost_price=10.0,
             selling_price=20.0,
-            stock=10,
             status=ProductStatus.seasonal,
             is_active=True,
         ),
@@ -84,7 +82,6 @@ async def status_products(manager_user: User):
             supplier_name="Supplier",
             cost_price=10.0,
             selling_price=20.0,
-            stock=10,
             status=ProductStatus.discontinued,
             is_active=True,
         ),
@@ -139,7 +136,6 @@ async def test_sellable_only_includes_legacy_products_without_status(
         supplier_name="Supplier",
         cost_price=10.0,
         selling_price=20.0,
-        stock=5,
         is_active=True,
     )
     await legacy.insert()

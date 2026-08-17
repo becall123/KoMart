@@ -69,7 +69,6 @@ async def bulk_product(manager_user: User):
         pack_selling_price=900.0,
         units_per_buy_uom=24,
         sell_mode=SellMode.both,
-        stock=10,
         status=ProductStatus.active,
         is_active=True,
     )

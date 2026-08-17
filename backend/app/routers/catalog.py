@@ -10,6 +10,7 @@ from app.models.discount_rule import DiscountRule, DiscountRuleType
 from app.schemas.common import PaginatedResponse
 from app.services.store_settings import get_store_settings
 from app.services.product_list import to_list_lean
+from app.services.stock import get_current_stock, get_current_stock_batch
 from app.http_cache import set_public_cache
 
 router = APIRouter(prefix="/catalog", tags=["Catalog (Public)"])
@@ -60,7 +61,9 @@ class CatalogOfferResponse(BaseModel):
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _to_catalog(p: Product, *, lean: bool = False) -> CatalogProductResponse:
+async def _to_catalog(p: Product, *, lean: bool = False, stock: int | None = None) -> CatalogProductResponse:
+    if stock is None:
+        stock = await get_current_stock(str(p.id))
     # List keeps first image for cards; omits long text. Detail keeps full fields.
     if lean:
         images = list(p.images or [])[:1]
@@ -90,7 +93,7 @@ def _to_catalog(p: Product, *, lean: bool = False) -> CatalogProductResponse:
         tags=p.tags if hasattr(p, "tags") and p.tags else [],
         is_popular=bool(getattr(p, "is_popular", False)),
         is_trending=bool(getattr(p, "is_trending", False)),
-        in_stock=p.stock > 0,
+        in_stock=stock > 0,
     )
 
 
@@ -208,8 +211,15 @@ async def list_catalog(
         limit=page_size,
     )
 
+    product_ids = [str(p.id) for p in products]
+    stock_map = await get_current_stock_batch(product_ids)
+    data = [
+        await _to_catalog(p, lean=True, stock=stock_map.get(str(p.id), 0))
+        for p in products
+    ]
+
     return PaginatedResponse(
-        data=[_to_catalog(p, lean=True) for p in products],
+        data=data,
         total=total,
         page=page,
         page_size=page_size,
@@ -226,4 +236,4 @@ async def get_catalog_product(product_id: str, response: Response):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Product not found")
     if hasattr(product, "status") and product.status == ProductStatus.discontinued:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Product not found")
-    return _to_catalog(product)
+    return await _to_catalog(product)

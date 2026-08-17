@@ -105,7 +105,6 @@ class Product(Document):
     images: list[str] = Field(default_factory=list)
     nutrition_info: Optional[str] = None
     allergen_info: Optional[str] = None
-    stock: int = Field(default=0, ge=0)
     low_stock_threshold: int = 10
     status: ProductStatus = ProductStatus.active
     tags: list[str] = Field(default_factory=list)
@@ -122,7 +121,6 @@ class Product(Document):
         indexes = [
             IndexModel([("supplier_id", ASCENDING)]),
             IndexModel([("is_active", ASCENDING), ("name", ASCENDING)]),
-            IndexModel([("is_active", ASCENDING), ("stock", ASCENDING)]),
             IndexModel([("is_active", ASCENDING), ("category", ASCENDING)]),
             IndexModel([("is_active", ASCENDING), ("status", ASCENDING), ("name", ASCENDING)]),
             IndexModel([("tags", ASCENDING)]),

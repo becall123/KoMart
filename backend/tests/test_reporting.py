@@ -36,7 +36,6 @@ async def sample_products():
             supplier_name="Supplier",
             cost_price=10.0,
             selling_price=20.0,
-            stock=idx,
             low_stock_threshold=1,
             is_active=True,
         )
@@ -76,7 +75,6 @@ async def test_aggregate_batch_inventory_value_weighted():
         supplier_name="Supplier",
         cost_price=100.0,
         selling_price=150.0,
-        stock=150,
         low_stock_threshold=1,
         is_active=True,
     )

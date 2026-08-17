@@ -27,7 +27,6 @@ from app.models.expense import Expense, ExpenseCategory
 from app.models.category import Category
 from app.models.refresh_token import RefreshToken
 from app.models.audit_log import AuditLog
-from app.services.stock import refresh_all_product_stocks
 
 # ---------------------------------------------------------------------------
 # Helper image placeholder
@@ -533,7 +532,6 @@ async def seed():
             images=[_img(name)],
             nutrition_info=NUTRITION_MAP.get(cat),
             allergen_info=ALLERGEN_MAP.get(cat),
-            stock=0,
             low_stock_threshold=threshold,
         ).insert()
         products.append(p)
@@ -704,8 +702,6 @@ async def seed():
         await exp.insert()
     print(f"Created {len(expense_seeds)} expenses.")
 
-    await refresh_all_product_stocks()
-    print("Synced product stock cache (all products start at 0).")
     print()
     print("Seed complete!")
     print(f"  Products           : {len(products)}")
@@ -748,7 +744,6 @@ async def backfill_product_suppliers():
         await product.set({"supplier_id": supplier_id, "supplier_name": supplier_name})
         updated += 1
 
-    await refresh_all_product_stocks()
     print(f"Backfill complete — updated {updated} product(s).")
 
 

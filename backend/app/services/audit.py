@@ -143,7 +143,6 @@ def product_snapshot(product: Any) -> dict[str, Any]:
         "barcode": product.barcode,
         "cost_price": product.cost_price,
         "selling_price": product.selling_price,
-        "stock": product.stock,
         "category": product.category,
         "status": product.status.value if hasattr(product, "status") and product.status else "active",
         "is_active": product.is_active,

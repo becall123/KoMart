@@ -23,6 +23,7 @@ from app.models.purchase_order import POStatus, PurchaseOrder, PurchaseOrderItem
 from app.models.user import User, UserRole
 from app.schemas.purchase_order import PurchaseOrderReceiveItem
 from app.services.po_receive import receive_purchase_order_items
+from app.services.stock import get_current_stock
 
 
 @pytest.fixture(autouse=True)
@@ -58,7 +59,6 @@ async def test_po_receive_atomic_creates_batches_and_updates_po():
         supplier_name="",
         cost_price=10.0,
         selling_price=20.0,
-        stock=0,
         is_active=True,
     )
     prod_b = Product(
@@ -72,7 +72,6 @@ async def test_po_receive_atomic_creates_batches_and_updates_po():
         supplier_name="",
         cost_price=15.0,
         selling_price=25.0,
-        stock=0,
         is_active=True,
     )
     await prod_a.insert()
@@ -137,8 +136,8 @@ async def test_po_receive_atomic_creates_batches_and_updates_po():
 
     prod_a_r = await Product.get(str(prod_a.id))
     prod_b_r = await Product.get(str(prod_b.id))
-    assert prod_a_r is not None and prod_a_r.stock == 10
-    assert prod_b_r is not None and prod_b_r.stock == 5
+    assert prod_a_r is not None and await get_current_stock(str(prod_a.id)) == 10
+    assert prod_b_r is not None and await get_current_stock(str(prod_b.id)) == 5
     assert prod_a_r.cost_price == 12.0
     assert prod_b_r.cost_price == 18.0
 
@@ -164,7 +163,6 @@ async def test_po_receive_batch_numbers_use_line_index():
         supplier_name="",
         cost_price=10.0,
         selling_price=20.0,
-        stock=0,
         is_active=True,
     )
     await product.insert()

@@ -33,12 +33,11 @@ async def test_item_response_includes_buy_and_base_uom_fields():
         units_per_buy_uom=12,
         cost_price=10.0,
         selling_price=25.0,
-        stock=5,
         is_active=True,
     )
     await product.insert()
 
-    response = _item_response(product, [])
+    response = await _item_response(product, [])
     assert response.uom == "pcs"
     assert response.buy_uom == "pack"
     assert response.units_per_buy_uom == 12

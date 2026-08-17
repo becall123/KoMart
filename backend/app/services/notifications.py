@@ -5,7 +5,8 @@ from __future__ import annotations
 from app.models.notification import Notification, NotificationType
 from app.models.product import Product
 from app.models.purchase_order import POStatus, PurchaseOrder
-from app.services.stock import expiring_product_ids
+from app.models.inventory import InventoryBatch
+from app.services.stock import expiring_product_ids, get_current_stock_batch
 from app.services.store_settings import get_store_settings
 
 
@@ -48,32 +49,24 @@ async def sync_notifications() -> None:
     within_days = settings.expiry_warning_days
     active_keys: set[str] = set()
 
-    low_stock_pipeline = [
-        {"$match": {"is_active": True}},
-        {
-            "$match": {
-                "$expr": {
-                    "$and": [
-                        {"$gt": ["$stock", 0]},
-                        {"$lte": ["$stock", "$low_stock_threshold"]},
-                    ]
-                }
-            }
-        },
-        {"$project": {"name": 1, "stock": 1, "low_stock_threshold": 1}},
-    ]
-    for row in await Product.aggregate(low_stock_pipeline).to_list():
-        product_id = str(row["_id"])
-        key = _auto_key(f"low_stock:{product_id}")
+    products = await Product.find(Product.is_active == True).to_list()  # noqa: E712
+    product_ids = [str(p.id) for p in products]
+    stock_map = await get_current_stock_batch(product_ids)
+
+    for product in products:
+        pid = str(product.id)
+        stock = stock_map.get(pid, 0)
+        if stock <= 0 or stock > product.low_stock_threshold:
+            continue
+        key = _auto_key(f"low_stock:{pid}")
         active_keys.add(key)
-        stock = int(row["stock"])
-        threshold = int(row["low_stock_threshold"])
+        threshold = int(product.low_stock_threshold)
         await _upsert_auto(
             key,
             type=NotificationType.low_stock,
             title="Low Stock Alert",
-            message=f'{row["name"]} is running low ({stock} units, threshold {threshold})',
-            link=f"/inventory/{product_id}",
+            message=f'{product.name} is running low ({stock} units, threshold {threshold})',
+            link=f"/inventory/{pid}",
         )
 
     expiring_ids = await expiring_product_ids(within_days)

@@ -47,6 +47,19 @@ async def get_batch_total(product_id: str) -> int:
     return sum(batch.quantity for batch in batches)
 
 
+async def get_current_stock(product_id: str) -> int:
+    return await get_batch_total(product_id)
+
+
+async def get_current_stock_batch(product_ids: list[str]) -> dict[str, int]:
+    pipeline = [
+        {"$match": {"product_id": {"$in": product_ids}, "quantity": {"$gt": 0}}},
+        {"$group": {"_id": "$product_id", "total": {"$sum": "$quantity"}}},
+    ]
+    rows = await InventoryBatch.aggregate(pipeline).to_list()
+    return {row["_id"]: row["total"] for row in rows}
+
+
 async def refresh_product_stock(product: Product) -> int:
     total = await get_batch_total(str(product.id))
     await product.set({"stock": total, "updated_at": datetime.now(timezone.utc)})
@@ -134,7 +147,6 @@ async def deduct_stock_fefo(product_id: str, quantity: int) -> list[BatchDeducti
         remaining -= deduct
 
     if remaining > 0:
-        # Roll back any successful deductions from this attempt, then fail.
         if deductions:
             await restock_from_deductions(deductions)
         raise HTTPException(
@@ -142,7 +154,6 @@ async def deduct_stock_fefo(product_id: str, quantity: int) -> list[BatchDeducti
             detail=f"Insufficient stock (concurrent update). Could not allocate {remaining} unit(s).",
         )
 
-    await refresh_product_stock(product)
     return deductions
 
 
@@ -159,8 +170,6 @@ async def restock_from_deductions(deductions: list[BatchDeduction]) -> None:
 
     for product_id in touched_products:
         product = await Product.get(product_id)
-        if product:
-            await refresh_product_stock(product)
 
 
 async def _insert_adjustment(
@@ -269,7 +278,7 @@ async def receive_stock(
     if not product:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Product not found")
 
-    stock_before = product.stock
+    stock_before = await get_current_stock(product_id)
     landed_cost = unit_cost if unit_cost is not None and unit_cost > 0 else product.cost_price
     selling_price = (
         unit_selling_price
@@ -287,10 +296,8 @@ async def receive_stock(
         received_at=datetime.now(timezone.utc),
     )
     await batch.insert()
-    await refresh_product_stock(product)
 
-    refreshed = await Product.get(product_id)
-    stock_after = refreshed.stock if refreshed else stock_before + quantity
+    stock_after = await get_current_stock(product_id)
     reason = f"Received batch {batch_number}"
     ref_type = "receive"
     ref_id = str(batch.id)
@@ -333,7 +340,7 @@ async def adjust_stock(
     if not product:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Product not found")
 
-    stock_before = product.stock
+    stock_before = await get_current_stock(product_id)
     affected_batch_id = batch_id
 
     if batch_id:
@@ -349,7 +356,6 @@ async def adjust_stock(
             {"_id": batch.id},
             {"$set": {"quantity": max(0, new_qty)}},
         )
-        await refresh_product_stock(product)
     elif quantity < 0:
         await deduct_stock_fefo(product_id, abs(quantity))
     else:
@@ -362,10 +368,8 @@ async def adjust_stock(
         )
         await batch.insert()
         affected_batch_id = str(batch.id)
-        await refresh_product_stock(product)
 
-    refreshed = await Product.get(product_id)
-    stock_after = refreshed.stock if refreshed else stock_before + quantity
+    stock_after = await get_current_stock(product_id)
 
     await _insert_adjustment(
         product=product,

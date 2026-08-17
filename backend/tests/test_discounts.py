@@ -54,7 +54,6 @@ async def snack_product(manager_user: User):
         supplier_name="Supplier",
         cost_price=50.0,
         selling_price=100.0,
-        stock=20,
         status=ProductStatus.active,
         is_active=True,
     )

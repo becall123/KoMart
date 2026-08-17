@@ -1,5 +1,7 @@
 """Notifications API tests."""
 
+from datetime import datetime, timezone
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -7,6 +9,7 @@ from app.main import app
 from app.database import init_db
 from app.models.user import User, UserRole
 from app.models.product import Product, ProductStatus
+from app.models.inventory import InventoryBatch
 from app.models.notification import Notification, NotificationType
 from app.auth.jwt import hash_password
 
@@ -54,13 +57,21 @@ async def low_stock_product(manager_user: User):
         supplier_name="Supplier",
         cost_price=50.0,
         selling_price=100.0,
-        stock=3,
         low_stock_threshold=10,
         status=ProductStatus.active,
         is_active=True,
     )
     await product.insert()
+    batch = InventoryBatch(
+        product_id=str(product.id),
+        batch_number="TEST-BATCH-001",
+        quantity=3,
+        unit_cost=50.0,
+        received_at=datetime.now(timezone.utc),
+    )
+    await batch.insert()
     yield product
+    await batch.delete()
     await product.delete()
 
 

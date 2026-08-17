@@ -55,7 +55,6 @@ class ProductCreate(BaseModel):
     images: list[str] = Field(default_factory=list)
     nutrition_info: Optional[str] = None
     allergen_info: Optional[str] = None
-    stock: int = Field(ge=0, default=0)
     low_stock_threshold: int = Field(ge=0, default=10)
     status: ProductStatus = ProductStatus.active
     tags: list[str] = Field(default_factory=list)

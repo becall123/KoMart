@@ -28,7 +28,6 @@ async def test_sale_notes_round_trip():
         supplier_name="Supplier",
         cost_price=10.0,
         selling_price=25.0,
-        stock=0,
         low_stock_threshold=1,
         status=ProductStatus.active,
         is_active=True,

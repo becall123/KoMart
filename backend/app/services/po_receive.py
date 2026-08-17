@@ -53,8 +53,6 @@ class _ReceiveWriteContext:
     po_id_str: str
     plans: list[_ReceivePlan]
     product_map: dict[str, Product]
-    stock_before: dict[str, int]
-    stock_delta: Counter[str]
     product_field_updates: dict[str, dict]
     batch_docs: list[dict]
     updated_items: list[PurchaseOrderItem]
@@ -87,24 +85,32 @@ async def _commit_writes(ctx: _ReceiveWriteContext, *, session: Any | None) -> N
     po_col = PurchaseOrder.get_motor_collection()
     kwargs = {"session": session} if session is not None else {}
 
-    touched_products = set(ctx.product_field_updates) | set(ctx.stock_delta)
+    touched_products = set(ctx.product_field_updates)
     for pid in touched_products:
         update: dict[str, Any] = {"$set": {"updated_at": ctx.now}}
         fields = ctx.product_field_updates.get(pid)
         if fields:
             update["$set"].update(fields)
-        if pid in ctx.stock_delta:
-            update["$inc"] = {"stock": ctx.stock_delta[pid]}
         await product_col.update_one(
             {"_id": PydanticObjectId(pid)},
             update,
             **kwargs,
         )
 
+    pid_to_initial_stock: dict[str, int] = {}
+    for plan in ctx.plans:
+        pid = plan.item.product_id
+        if pid not in pid_to_initial_stock:
+            batches = await InventoryBatch.find(
+                InventoryBatch.product_id == pid,
+                InventoryBatch.quantity > 0,
+            ).to_list()
+            pid_to_initial_stock[pid] = sum(b.quantity for b in batches)
+
     batch_result = await batch_col.insert_many(ctx.batch_docs, **kwargs)
     ctx.inserted_batch_ids = list(batch_result.inserted_ids)
 
-    running_stock = dict(ctx.stock_before)
+    running_stock = dict(pid_to_initial_stock)
     adj_docs: list[dict] = []
     for plan, batch_id in zip(ctx.plans, ctx.inserted_batch_ids, strict=True):
         pid = plan.item.product_id
@@ -292,10 +298,8 @@ async def receive_purchase_order_items(
     now = datetime.now(timezone.utc)
     po_id_str = str(po.id)
     price_snapshots: list[_PriceSnapshot] = []
-    stock_before: dict[str, int] = {pid: product_map[pid].stock for pid in product_ids}
     product_revert_snapshot: dict[str, dict] = {
         pid: {
-            "stock": product_map[pid].stock,
             "cost_price": product_map[pid].cost_price,
             "selling_price": product_map[pid].selling_price,
             "supplier_id": product_map[pid].supplier_id,
@@ -304,7 +308,6 @@ async def receive_purchase_order_items(
         }
         for pid in product_ids
     }
-    stock_delta: Counter[str] = Counter()
     product_field_updates: dict[str, dict] = {}
     batch_docs: list[dict] = []
 
@@ -354,15 +357,12 @@ async def receive_purchase_order_items(
             "purchase_order_id": po_id_str,
             "received_at": now,
         })
-        stock_delta[pid] += plan.base_delta
 
     ctx = _ReceiveWriteContext(
         po_id=po.id,
         po_id_str=po_id_str,
         plans=plans,
         product_map=product_map,
-        stock_before=stock_before,
-        stock_delta=stock_delta,
         product_field_updates=product_field_updates,
         batch_docs=batch_docs,
         updated_items=updated_items,

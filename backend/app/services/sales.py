@@ -21,6 +21,7 @@ from app.services.stock import (
     BatchDeduction,
     check_stock_available,
     deduct_stock_fefo,
+    get_current_stock,
     record_inventory_change,
     restock_from_deductions,
 )
@@ -282,7 +283,7 @@ async def record_sale(
     try:
         for item in body.items:
             product = product_map[item.product_id]
-            stock_before = product.stock
+            stock_before = await get_current_stock(item.product_id)
             base_qty = _base_quantity(item)
 
             deductions = await deduct_stock_fefo(item.product_id, base_qty)
