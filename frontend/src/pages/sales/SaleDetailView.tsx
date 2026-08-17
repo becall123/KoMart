@@ -15,7 +15,6 @@ import {
   Typography,
 } from '@mui/material';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import { useNavigate } from 'react-router-dom';
 import { formatAmount, formatCurrency, formatDateTime } from '@/utils';
 import { PAYMENT_METHODS } from '@/constants';
 import { TransactionDiscountSummary } from '@/components/sales/TransactionDiscountSummary';
@@ -29,7 +28,6 @@ interface SaleDetailViewProps {
 }
 
 export function SaleDetailView({ transaction: txn }: SaleDetailViewProps) {
-  const navigate = useNavigate();
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const { data: selectedProduct } = useProduct(selectedProductId ?? '');
   const paymentLabel =
