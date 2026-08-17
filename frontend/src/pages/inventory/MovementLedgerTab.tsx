@@ -9,7 +9,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { DataTable, type Column } from '@/components/tables/DataTable';
 import { StatCard } from '@/components/common/StatCard';
 import { NepaliAwareDatePicker } from '@/components/common/NepaliAwareDatePicker';
@@ -141,11 +141,10 @@ export function MovementLedgerTab({ productId, hideProductColumn }: MovementLedg
         if (row.referenceType === 'sale' && row.referenceId) {
           return (
             <Button
-              component={RouterLink}
-              to={`/sales/${row.referenceId}`}
+              onClick={() => window.open(`/sales/${row.referenceId}`, '_blank')}
               size="small"
               variant="text"
-              sx={{ textTransform: 'none', p: 0, minWidth: 0 }}
+              sx={{ textTransform: 'none', p: 0, minWidth: 0, cursor: 'pointer' }}
             >
               {row.transactionNumber || row.referenceLabel}
             </Button>
@@ -154,11 +153,10 @@ export function MovementLedgerTab({ productId, hideProductColumn }: MovementLedg
         if (row.referenceType === 'purchase_order' && row.referenceId) {
           return (
             <Button
-              component={RouterLink}
-              to={`/purchase-orders/${row.referenceId}`}
+              onClick={() => window.open(`/purchase-orders/${row.referenceId}`, '_blank')}
               size="small"
               variant="text"
-              sx={{ textTransform: 'none', p: 0, minWidth: 0 }}
+              sx={{ textTransform: 'none', p: 0, minWidth: 0, cursor: 'pointer' }}
             >
               PO
             </Button>

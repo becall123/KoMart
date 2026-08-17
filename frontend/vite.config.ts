@@ -10,8 +10,8 @@ export default defineConfig({
     },
   },
   test: {
-    environment: 'node',
-    include: ['src/**/*.test.ts'],
+    environment: 'jsdom',
+    include: ['src/**/*.test.{ts,tsx}'],
   },
   server: {
     port: 5173,
